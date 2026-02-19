@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-02-19T16:42:49.686827Z",
+  "statistics": {
+    "total_cases": 671,
+    "cases_with_history": 663,
+    "cases_with_findings": 654,
+    "cases_with_diagnosis": 671,
+    "cases_with_images": 671,
+    "cases_complete": 650,
+    "total_images_referenced": 2050,
+    "total_images_on_disk": 2050,
+    "missing_images": [],
+    "modality_counts": {
+      "CT - noncontrast": 401,
+      "CT - GI & IV Contrast": 165,
+      "CT w/contrast (IV)": 445,
+      "MR - T1W w/Gadolinium": 126,
+      "MR - T2 weighted": 302,
+      "MR - T1W - noncontrast": 240,
+      "MR - DWI Diffusion Weighted": 22,
+      "MR - Other Pulse Seq.": 28,
+      "MR - FLAIR": 58,
+      "CT - GI Contrast": 20,
+      "CT - Montage": 12,
+      "Drawing": 3,
+      "CT": 4,
+      "MR": 8,
+      "MRA - MR Angiography/Venography": 40,
+      "CTA - CT Angiography": 10,
+      "MR - ADC Map (App Diff Coeff)": 13,
+      "MR - T1W w/Gd (fat suppressed)": 63,
+      "CT - Montage of Images": 1,
+      "MR - FIESTA": 21,
+      "MR - Montage": 15,
+      "MR T2* gradient,GRE,MPGR,SWAN,SWI": 26,
+      "MR - STIR": 5,
+      "Virtual Colonoscopy": 2,
+      "MR - PDW Proton Density": 14,
+      "MR - Montage of Images": 2,
+      " MR - Montage of Images": 1,
+      "MRS - Spectroscopy": 2,
+      "MRI": 1
+    },
+    "location_category_counts": {
+      "Reproductive and Urinary System": 158,
+      "Thorax": 334,
+      "Head": 884,
+      "Abdomen": 319,
+      "Spine and Muscles": 355
+    },
+    "cases_missing_descriptions": []
+  }
+}
