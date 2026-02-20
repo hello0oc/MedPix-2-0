@@ -172,6 +172,15 @@ def _is_oom_error(exc: Exception) -> bool:
     return "out of memory" in message or "cuda" in message
 
 
+def _is_cuda_kernel_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "cuda error" in message
+        or "misaligned address" in message
+        or "device-side assertions" in message
+    )
+
+
 def medgemma_token_budget(
     requested_tokens: int,
     ehr_text: str,
@@ -324,7 +333,7 @@ def call_medgemma(
     effective_tokens = max_tokens
     effective_ehr = ehr_text
 
-    for attempt in range(4):
+    for attempt in range(5):
         messages = [
             {"role": "system", "content": system_prompt},
             {
@@ -351,13 +360,27 @@ def call_medgemma(
                 retry_backoff_sec=2.0,
             )
         except Exception as exc:
-            if not _is_oom_error(exc) or attempt == 3:
+            if attempt == 4:
                 raise
 
-            effective_tokens = max(32, int(effective_tokens * 0.7))
-            effective_ehr = truncate_text(effective_ehr, max(120, int(len(effective_ehr) * 0.7)))
-            if effective_images > 0:
-                effective_images -= 1
+            if _is_oom_error(exc):
+                effective_tokens = max(32, int(effective_tokens * 0.7))
+                effective_ehr = truncate_text(effective_ehr, max(120, int(len(effective_ehr) * 0.7)))
+                if effective_images > 0:
+                    effective_images -= 1
+                continue
+
+            if _is_cuda_kernel_error(exc):
+                # Endpoint-side CUDA kernel instability is often triggered by heavier multimodal requests.
+                # Degrade request load progressively before giving up.
+                if effective_images > 0:
+                    effective_images -= 1
+                else:
+                    effective_tokens = max(64, int(effective_tokens * 0.7))
+                    effective_ehr = truncate_text(effective_ehr, max(180, int(len(effective_ehr) * 0.8)))
+                continue
+
+            raise
 
     raise RuntimeError("Inference failed after adaptive retries.")
 
@@ -576,7 +599,7 @@ def main() -> None:
         sort_by_richness = st.checkbox("Sort patients by history richness", value=True,
                                        help="Orders the patient list richest history first.")
         use_images = st.checkbox("Include linked images", value=True)
-        show_linked_images = st.checkbox("Preview images in viewer", value=False)
+        show_linked_images = st.checkbox("Preview images in viewer", value=True)
         max_tokens = st.slider(
             "Max output tokens",
             64, 4096, 1024, 64,
@@ -751,194 +774,189 @@ def main() -> None:
     diagnosis_output = st.session_state.get(_dk, "")
     diagnosis_error  = st.session_state.get(_de, "")
 
-    # ── Tabs: Patient Data | AI Insights ────────────────────────────────────
-    has_results = bool(explain_output or explain_error or diagnosis_output or diagnosis_error)
-    ai_tab_label = "AI Insights" if not has_results else "AI Insights  *"
-    tab_patient, tab_ai = st.tabs(["Patient Data", ai_tab_label])
+    # ── Unified three-panel layout ─────────────────────────────────────────
+    # All three panels (EHR · Images · AI Insights) sit side-by-side so the
+    # user can cross-reference AI output against the source data without any
+    # tab switching.
+    ehr_col, img_col, ai_col = st.columns([1.2, 1.0, 1.4])
 
-    # ────────────────────────────────────────────────────────────────────────
-    # TAB 1 — Patient Data
-    # ────────────────────────────────────────────────────────────────────────
-    with tab_patient:
-        ehr_col, img_col = st.columns([1.2, 1.0])
-
-        with ehr_col:
-            st.subheader("EHR Record")
-            st.markdown(
-                f"**Title:** {sanitize_text(selected_case.get('title', '')) or 'N/A'}"
-            )
-            dataset_dx = sanitize_text(selected_case.get("diagnosis", ""))
-            if dataset_dx:
-                st.info(f"Dataset diagnosis: {dataset_dx}")
-            else:
-                st.caption("Dataset diagnosis: not available")
-
-            with st.expander("History", expanded=True):
-                st.write(sanitize_text(selected_case.get("history", "")) or "Not available")
-            with st.expander("Physical Exam", expanded=False):
-                st.write(sanitize_text(selected_case.get("exam", "")) or "Not available")
-            with st.expander("Imaging Findings", expanded=True):
-                st.write(sanitize_text(selected_case.get("findings", "")) or "Not available")
-
-        with img_col:
-            st.subheader("Linked Images")
-            st.caption(
-                f"{_n_images} image(s) available for this case."
-                + (" Enable 'Preview images in viewer' in the sidebar to display them." if not show_linked_images else "")
-            )
-            if show_linked_images and resolved_images:
-                shown = resolved_images[:6]
-                preview_items: List[Any] = []
-                captions: List[str] = []
-                skipped = 0
-                for image_path in shown:
-                    try:
-                        preview_items.append(preview_payload(image_path))
-                        captions.append(image_path.name)
-                    except Exception:
-                        skipped += 1
-
-                if preview_items:
-                    st.image(
-                        preview_items,
-                        caption=captions,
-                        use_container_width=True,
-                    )
-                if skipped:
-                    st.caption(f"{skipped} image(s) could not be rendered for preview.")
-            elif show_linked_images:
-                st.info("No linked images found on disk for this case.")
-
-    # ────────────────────────────────────────────────────────────────────────
-    # TAB 2 — AI Insights
-    # ────────────────────────────────────────────────────────────────────────
-    with tab_ai:
-        if not has_results:
-            st.info(
-                "No AI results yet for this patient with the selected model. "
-                "Use the **Explain** or **Diagnose** buttons above to run inference."
-            )
+    # ── Column 1: EHR Record ───────────────────────────────────────────────
+    with ehr_col:
+        st.subheader("EHR Record")
+        st.markdown(
+            f"**Title:** {sanitize_text(selected_case.get('title', '')) or 'N/A'}"
+        )
+        dataset_dx = sanitize_text(selected_case.get("diagnosis", ""))
+        if dataset_dx:
+            st.info(f"Dataset diagnosis: {dataset_dx}")
         else:
-            diag_col, expl_col = st.columns(2)
+            st.caption("Dataset diagnosis: not available")
 
-            with diag_col:
-                st.subheader("Diagnostic Result")
-                if diagnosis_error:
-                    st.error(f"Request failed: {diagnosis_error}")
-                elif diagnosis_output:
-                    # 1) Try JSON
-                    diagnosis_json = parse_json_object(diagnosis_output)
-                    diagnosis_text = sanitize_text(diagnosis_json.get("diagnosis", "")) if diagnosis_json else ""
-                    rationale_text = sanitize_text(diagnosis_json.get("rationale", "")) if diagnosis_json else ""
-                    confidence_text = sanitize_text(diagnosis_json.get("confidence", "")) if diagnosis_json else ""
-                    key_findings_text = sanitize_text(diagnosis_json.get("key_findings", "")) if diagnosis_json else ""
-                    differential_text = sanitize_text(diagnosis_json.get("differential", "")) if diagnosis_json else ""
+        with st.expander("History", expanded=True):
+            st.write(sanitize_text(selected_case.get("history", "")) or "Not available")
+        with st.expander("Physical Exam", expanded=False):
+            st.write(sanitize_text(selected_case.get("exam", "")) or "Not available")
+        with st.expander("Imaging Findings", expanded=True):
+            st.write(sanitize_text(selected_case.get("findings", "")) or "Not available")
 
-                    # 2) Try markdown **Key:** Value (Gemini chain-of-thought style)
-                    if not diagnosis_text or not rationale_text:
-                        md = parse_markdown_fields(diagnosis_output)
-                        if not diagnosis_text:
-                            diagnosis_text = sanitize_text(
-                                md.get("final_diagnosis", "")
-                                or md.get("revised_diagnosis", "")
-                                or md.get("diagnosis", "")
-                            )
-                        if not rationale_text:
-                            rationale_text = sanitize_text(
-                                md.get("final_rationale", "")
-                                or md.get("revised_rationale", "")
-                                or md.get("rationale", "")
-                            )
-                        if not confidence_text:
-                            confidence_text = sanitize_text(md.get("confidence", ""))
-                        if not key_findings_text:
-                            key_findings_text = sanitize_text(md.get("key_findings", ""))
-                        if not differential_text:
-                            differential_text = sanitize_text(md.get("differential", ""))
+    # ── Column 2: Linked Images ────────────────────────────────────────────
+    with img_col:
+        st.subheader("Linked Images")
+        st.caption(
+            f"{_n_images} image(s) linked to this case."
+            + (" Enable 'Preview images in viewer' in the sidebar to display them." if not show_linked_images else "")
+        )
+        if show_linked_images and resolved_images:
+            shown = resolved_images[:6]
+            preview_items: List[Any] = []
+            captions: List[str] = []
+            skipped = 0
+            for image_path in shown:
+                try:
+                    preview_items.append(preview_payload(image_path))
+                    captions.append(image_path.name)
+                except Exception:
+                    skipped += 1
 
-                    # 3) Last-resort heuristic for diagnosis only
-                    if not diagnosis_text:
-                        diagnosis_text = parse_diagnosis(diagnosis_output)
+            if preview_items:
+                st.image(
+                    preview_items,
+                    caption=captions,
+                    use_container_width=True,
+                )
+            if skipped:
+                st.caption(f"{skipped} image(s) could not be rendered for preview.")
+        elif show_linked_images:
+            st.info("No linked images found on disk for this case.")
 
-                    # ── Display ──
-                    _conf_colour = {"high": "#1a7f37", "moderate": "#b45309", "low": "#b91c1c"}
-                    _conf_label = confidence_text or ""
-                    _conf_style = _conf_colour.get(_conf_label.lower(), "#1f77b4")
-                    conf_badge = (
-                        f" <span style='background:{_conf_style};color:white;padding:2px 8px;"
-                        f"border-radius:10px;font-size:0.75rem;'>{_conf_label}</span>"
-                        if _conf_label else ""
+    # ── Column 3: AI Insights (Diagnosis + Plain-Language Explanation) ─────
+    with ai_col:
+        has_results = bool(explain_output or explain_error or diagnosis_output or diagnosis_error)
+
+        # ── 3a: Diagnostic Result ──────────────────────────────────────────
+        st.subheader("Diagnostic Result")
+        if diagnosis_error:
+            st.error(f"Request failed: {diagnosis_error}")
+        elif diagnosis_output:
+            # 1) Try JSON
+            diagnosis_json = parse_json_object(diagnosis_output)
+            diagnosis_text = sanitize_text(diagnosis_json.get("diagnosis", "")) if diagnosis_json else ""
+            rationale_text = sanitize_text(diagnosis_json.get("rationale", "")) if diagnosis_json else ""
+            confidence_text = sanitize_text(diagnosis_json.get("confidence", "")) if diagnosis_json else ""
+            key_findings_text = sanitize_text(diagnosis_json.get("key_findings", "")) if diagnosis_json else ""
+            differential_text = sanitize_text(diagnosis_json.get("differential", "")) if diagnosis_json else ""
+
+            # 2) Try markdown **Key:** Value (Gemini chain-of-thought style)
+            if not diagnosis_text or not rationale_text:
+                md = parse_markdown_fields(diagnosis_output)
+                if not diagnosis_text:
+                    diagnosis_text = sanitize_text(
+                        md.get("final_diagnosis", "")
+                        or md.get("revised_diagnosis", "")
+                        or md.get("diagnosis", "")
                     )
+                if not rationale_text:
+                    rationale_text = sanitize_text(
+                        md.get("final_rationale", "")
+                        or md.get("revised_rationale", "")
+                        or md.get("rationale", "")
+                    )
+                if not confidence_text:
+                    confidence_text = sanitize_text(md.get("confidence", ""))
+                if not key_findings_text:
+                    key_findings_text = sanitize_text(md.get("key_findings", ""))
+                if not differential_text:
+                    differential_text = sanitize_text(md.get("differential", ""))
 
-                    if diagnosis_text:
-                        st.markdown(
-                            f"<div style='background:#f0fdf4;border-left:4px solid #16a34a;"
-                            f"padding:10px 14px;border-radius:4px;font-size:1.05rem;'>"
-                            f"<strong>Diagnosis:</strong> {diagnosis_text}{conf_badge}</div>",
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.warning("Diagnosis could not be extracted — see raw output below.")
+            # 3) Last-resort heuristic for diagnosis only
+            if not diagnosis_text:
+                diagnosis_text = parse_diagnosis(diagnosis_output)
 
-                    if rationale_text:
-                        st.markdown(f"**Rationale:** {rationale_text}")
-                    if key_findings_text:
-                        st.markdown(f"**Key findings:** {key_findings_text}")
-                    if differential_text:
-                        st.markdown(f"**Differential:** {differential_text}")
+            # ── Display ──
+            _conf_colour = {"high": "#1a7f37", "moderate": "#b45309", "low": "#b91c1c"}
+            _conf_label = confidence_text or ""
+            _conf_style = _conf_colour.get(_conf_label.lower(), "#1f77b4")
+            conf_badge = (
+                f" <span style='background:{_conf_style};color:white;padding:2px 8px;"
+                f"border-radius:10px;font-size:0.75rem;'>{_conf_label}</span>"
+                if _conf_label else ""
+            )
 
-                    with st.expander("Raw output"):
-                        st.code(diagnosis_output)
-                else:
-                    st.caption("Run 'Diagnose' to see results here.")
+            if diagnosis_text:
+                st.markdown(
+                    f"<div style='background:#f0fdf4;border-left:4px solid #16a34a;"
+                    f"padding:10px 14px;border-radius:4px;font-size:1.05rem;'>"
+                    f"<strong>Diagnosis:</strong> {diagnosis_text}{conf_badge}</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.warning("Diagnosis could not be extracted — see raw output below.")
 
-            with expl_col:
-                st.subheader("Plain-Language Explanation")
-                if explain_error:
-                    st.error(f"Request failed: {explain_error}")
-                elif explain_output:
-                    explain_json = parse_json_object(explain_output)
-                    if explain_json:
-                        summary_text = sanitize_text(explain_json.get("plain_summary", ""))
-                        findings_text = sanitize_text(
-                            explain_json.get("image_findings", "")
-                            or explain_json.get("image_interpretation", "")
-                        )
-                        conclusion_text = sanitize_text(
-                            explain_json.get("image_conclusion", "")
-                            or explain_json.get("conclusion", "")
-                        )
-                        next_steps_text = sanitize_text(explain_json.get("next_steps", ""))
-                    else:
-                        # Fallback: markdown **Key:** Value
-                        md = parse_markdown_fields(explain_output)
-                        summary_text = sanitize_text(
-                            md.get("plain_summary", "") or md.get("summary", "")
-                        )
-                        findings_text = sanitize_text(
-                            md.get("image_findings", "") or md.get("image_interpretation", "")
-                        )
-                        conclusion_text = sanitize_text(
-                            md.get("image_conclusion", "") or md.get("conclusion", "")
-                        )
-                        next_steps_text = sanitize_text(md.get("next_steps", ""))
+            if rationale_text:
+                st.markdown(f"**Rationale:** {rationale_text}")
+            if key_findings_text:
+                st.markdown(f"**Key findings:** {key_findings_text}")
+            if differential_text:
+                st.markdown(f"**Differential:** {differential_text}")
 
-                    if summary_text:
-                        st.info(summary_text)
-                    elif not any([findings_text, conclusion_text, next_steps_text]):
-                        # Nothing structured — show raw
-                        st.write(explain_output)
-                    for label, value in [
-                        ("Image findings", findings_text),
-                        ("Image conclusion", conclusion_text),
-                        ("Next steps", next_steps_text),
-                    ]:
-                        if value:
-                            st.markdown(f"**{label}:** {value}")
-                    with st.expander("Raw output"):
-                        st.code(explain_output)
-                else:
-                    st.caption("Run 'Explain' to see results here.")
+            with st.expander("Raw output"):
+                st.code(diagnosis_output)
+        elif not has_results:
+            st.caption("Click **Diagnose** above to generate a clinical diagnostic result.")
+        else:
+            st.caption("Run 'Diagnose' to see results here.")
+
+        st.divider()
+
+        # ── 3b: Plain-Language Explanation ────────────────────────────────
+        st.subheader("Plain-Language Explanation")
+        if explain_error:
+            st.error(f"Request failed: {explain_error}")
+        elif explain_output:
+            explain_json = parse_json_object(explain_output)
+            if explain_json:
+                summary_text = sanitize_text(explain_json.get("plain_summary", ""))
+                findings_text = sanitize_text(
+                    explain_json.get("image_findings", "")
+                    or explain_json.get("image_interpretation", "")
+                )
+                conclusion_text = sanitize_text(
+                    explain_json.get("image_conclusion", "")
+                    or explain_json.get("conclusion", "")
+                )
+                next_steps_text = sanitize_text(explain_json.get("next_steps", ""))
+            else:
+                # Fallback: markdown **Key:** Value
+                md = parse_markdown_fields(explain_output)
+                summary_text = sanitize_text(
+                    md.get("plain_summary", "") or md.get("summary", "")
+                )
+                findings_text = sanitize_text(
+                    md.get("image_findings", "") or md.get("image_interpretation", "")
+                )
+                conclusion_text = sanitize_text(
+                    md.get("image_conclusion", "") or md.get("conclusion", "")
+                )
+                next_steps_text = sanitize_text(md.get("next_steps", ""))
+
+            if summary_text:
+                st.info(summary_text)
+            elif not any([findings_text, conclusion_text, next_steps_text]):
+                # Nothing structured — show raw
+                st.write(explain_output)
+            for label, value in [
+                ("Image findings", findings_text),
+                ("Image conclusion", conclusion_text),
+                ("Next steps", next_steps_text),
+            ]:
+                if value:
+                    st.markdown(f"**{label}:** {value}")
+            with st.expander("Raw output"):
+                st.code(explain_output)
+        elif not has_results:
+            st.caption("Click **Explain (non-medical)** above to generate a plain-language summary.")
+        else:
+            st.caption("Run 'Explain' to see results here.")
 
 
 if __name__ == "__main__":
