@@ -36,3 +36,7 @@ contains the code for DR-Minerva implementation
 contains the code for DR-Minerva with knowledge graph implementation
 
 _Refer to README files in each folder for further information_
+
+## Architecture
+
+For a cross-module architecture and data-flow explanation, see [ARCHITECTURE.md](ARCHITECTURE.md).

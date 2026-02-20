@@ -58,3 +58,4 @@ dump/
 
 # Dataset build artefacts that shouldn't be regenerated
 # (the patient-ehr-image-dataset/ folder IS intentionally tracked)
+.streamlit/secrets.toml

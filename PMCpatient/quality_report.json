@@ -1,0 +1,14 @@
+{
+  "total": 1000,
+  "has_history": 1000,
+  "has_gender": 1000,
+  "has_age": 1000,
+  "is_complete": 1000,
+  "completeness_pct": 100.0,
+  "gender_counts": {
+    "M": 550,
+    "F": 450,
+    "other": 0
+  },
+  "avg_patient_chars": 2975.7
+}

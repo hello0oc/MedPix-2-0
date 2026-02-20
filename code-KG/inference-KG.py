@@ -4,6 +4,7 @@ from llama_index.llms.huggingface import HuggingFaceLLM
 from llama_index.core import StorageContext
 from llama_index.core import Settings
 from tqdm import tqdm
+import ast
 import argparse
 import pickle
 import copy
@@ -45,8 +46,8 @@ if __name__ == '__main__':
         # path to local llama 3.1 8B inst
         llm_model_path = 'LLM/llama31inst/'
 
-    path = 'MedPIx-2-0/KG/'
-    path_results = 'MedPIx-2-0/'
+    path = 'MedPix-2-0/KG/'
+    path_results = 'MedPix-2-0/'
     inference_label = 'joint'
     n_exp_minerva = 4
 
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     with open(f"{path_results}experiments/{n_exp_minerva}/results-{inference_split}-{inference_label}.txt", "r") as f:
         lines = f.readlines()
 
-    exp_info = eval(lines[0])
+    exp_info = ast.literal_eval(lines[0])
     samples_dr_minerva = [tuple(line[:-1].split('\t')) for line in lines[2:]]
 
     for idx, sample in enumerate(tqdm(dataset[inference_split])):
@@ -114,7 +115,7 @@ if __name__ == '__main__':
         disease_discussion = get_block(sample, 'Disease Discussion', 'Topic')
         title_specific = get_block(sample, 'Title', 'Case')
         title_generic = get_block(sample, 'Title', 'Topic')
-        case_name = get_block(sample, 6)
+        case_name = get_block(sample, 'Case Diagnosis', 'Case')
         case_names = list(set([title_generic, title_specific, case_name]))
         case_names_str = ' or '.join(x for x in case_names)
 

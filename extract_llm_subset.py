@@ -51,14 +51,17 @@ def main():
             if not imgs:
                 continue
             prompt = build_prompt(rec)
+            if not prompt:
+                continue
+            first_img = imgs[0]
             sample = {
                 'case_id': rec.get('uid'),
                 'prompt': prompt,
                 'ground_truth': rec.get('diagnosis'),
                 'image_paths': [im['file_path'] for im in imgs],
-                'modalities': list({im.get('modality','') for im in imgs}),
-                'age': rec.get('images', [{}])[0].get('age',''),
-                'sex': rec.get('images', [{}])[0].get('sex',''),
+                'modalities': sorted({im.get('modality', '').strip() for im in imgs if im.get('modality')}),
+                'age': first_img.get('age', ''),
+                'sex': first_img.get('sex', ''),
             }
             fo.write(json.dumps(sample, ensure_ascii=False) + '\n')
             written += 1

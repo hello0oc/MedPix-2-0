@@ -4,6 +4,7 @@ from llama_index.llms.huggingface import HuggingFaceLLM
 from llama_index.core import StorageContext
 from llama_index.core import Settings
 from tqdm import tqdm
+import ast
 import argparse
 import pickle
 import copy
@@ -44,7 +45,7 @@ if __name__ == '__main__':
     with open(f"{path_results}experiments/{n_exp_minerva}/results-{inference_split}-{inference_label}.txt", "r") as f:
         lines = f.readlines()
 
-    exp_info = eval(lines[0])
+    exp_info = ast.literal_eval(lines[0])
     samples_dr_minerva = [tuple(line[:-1].split('\t')) for line in lines[2:]]
 
     for idx, sample in enumerate(tqdm(dataset[inference_split])):

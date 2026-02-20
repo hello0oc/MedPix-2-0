@@ -1,0 +1,43 @@
+{
+  "config": {
+    "input": "patient-ehr-image-dataset/full_dataset.jsonl",
+    "endpoint_url": "https://pcmy7bkqtqesrrzd.us-east-1.aws.endpoints.huggingface.cloud",
+    "model_id": "google/medgemma-1-5-4b-it-hae",
+    "num_shots": 3,
+    "num_targets": 3,
+    "max_images": 1,
+    "temperature": 0.1,
+    "max_tokens": 96,
+    "retries": 8,
+    "retry_backoff_sec": 3.0,
+    "exemplar_ehr_chars": 300,
+    "target_ehr_chars": 450,
+    "dry_run": false
+  },
+  "selected_uids": {
+    "exemplars": [
+      "MPX1007",
+      "MPX1009",
+      "MPX1012"
+    ],
+    "targets": [
+      "MPX1014",
+      "MPX1016",
+      "MPX1020"
+    ]
+  },
+  "metrics": {
+    "ehr_only": {
+      "n": 3,
+      "exact_match": 0.0,
+      "avg_token_f1": 0.0,
+      "avg_latency_sec": 18.397
+    },
+    "ehr_plus_images": {
+      "n": 3,
+      "exact_match": 0.0,
+      "avg_token_f1": 0.0,
+      "avg_latency_sec": 13.342
+    }
+  }
+}

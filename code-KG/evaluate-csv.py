@@ -1,5 +1,6 @@
 import pandas as pd
 import evaluate
+import ast
 import argparse
 
 if __name__ == '__main__':
@@ -14,12 +15,17 @@ if __name__ == '__main__':
     n_exp = args.n_exp
     inference_split = args.inference_split
     
-    path = 'MedPIx-2-0/KG/'
+    path = 'MedPix-2-0/KG/'
     
     with open(f"{path}experiments/{n_exp}/results-{inference_split}.txt", "r") as f:
         lines = f.readlines()
 
-    res = [eval(x) for x in lines[1:]]
+    res = []
+    for x in lines[1:]:
+        try:
+            res.append(ast.literal_eval(x))
+        except (ValueError, SyntaxError):
+            continue
 
     bleu = evaluate.load('bleu')
     rouge = evaluate.load('rouge')

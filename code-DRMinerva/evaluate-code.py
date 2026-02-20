@@ -1,4 +1,5 @@
 import argparse
+import ast
 import os
 import pandas as pd
 
@@ -23,7 +24,7 @@ if __name__ == '__main__':
     with open(f"{path}experiments/{n_exp}/results-{inference_split}-{inference_label}.txt", "r") as f:
         lines = f.readlines()
 
-    exp_info = eval(lines[0])
+    exp_info = ast.literal_eval(lines[0])
     samples = [tuple(line[:-1].split('\t')) for line in lines[2:]]
 
     if exp_info['inference'] == 'joint':
@@ -41,11 +42,12 @@ if __name__ == '__main__':
 
     for sample in samples:
         if exp_info['inference'] == 'joint':
-            if eval(sample[3])[0] in sample[4]:
+            pred = ast.literal_eval(sample[3])
+            if pred[0] in sample[4]:
                 results['correct_samples_modality'] += 1
-            if eval(sample[3])[1] in sample[4]:
+            if pred[1] in sample[4]:
                 results['correct_samples_location'] += 1
-            if eval(sample[3])[1] in sample[4] and eval(sample[3])[0] in sample[4]:
+            if pred[1] in sample[4] and pred[0] in sample[4]:
                 results['correct_samples'] += 1
         else:
             if sample[3] in sample[4]:

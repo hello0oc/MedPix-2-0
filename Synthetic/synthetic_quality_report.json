@@ -1,0 +1,9 @@
+{
+  "zip_path": "Synthetic/coherent-11-07-2022.zip",
+  "total_patients_csv": 3539,
+  "patients_with_dicom_files": 298,
+  "patients_with_imaging_studies": 1429,
+  "selected_patients_with_images": 298,
+  "total_dicom_files": 298,
+  "records_built": 298
+}

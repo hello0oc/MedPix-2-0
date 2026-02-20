@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MRI Slices — Samuel331 Ortega866 (Patient #2)</title>
+<style>
+  body { background:#111; color:#eee; font-family:monospace; margin:20px; }
+  h1 { color:#7cf; }
+  h2 { color:#adf; margin-top:30px; }
+  .row { display:flex; gap:20px; flex-wrap:wrap; margin-top:10px; }
+  .card { background:#222; padding:10px; border-radius:6px; text-align:center; }
+  .card img { display:block; max-width:300px; image-rendering:pixelated; }
+  .card span { display:block; margin-top:6px; font-size:12px; color:#8cf; }
+  .mosaic img { max-width:700px; }
+</style>
+</head>
+<body>
+<h1>Brain MRI — Samuel331 Ortega866</h1>
+<p>DOB: 1921-04-14 &nbsp;|&nbsp; Study date: 1994-04-19 &nbsp;|&nbsp; Modality: MR (Head) &nbsp;|&nbsp; Volume: 256×256×256</p>
+
+<h2>Orthogonal Mid-Slices</h2>
+<div class="row">
+  <div class="card">
+    <img src="axial_mid.png">
+    <span>Axial (frame 128/256)</span>
+  </div>
+  <div class="card">
+    <img src="coronal_mid.png">
+    <span>Coronal (row 128/256)</span>
+  </div>
+  <div class="card">
+    <img src="sagittal_mid.png">
+    <span>Sagittal (col 128/256)</span>
+  </div>
+</div>
+
+<h2>6×6 Axial Mosaic (all 36 evenly-spaced frames)</h2>
+<div class="row">
+  <div class="card mosaic">
+    <img src="axial_mosaic_6x6.png">
+    <span>Frames 0–255, every 7th slice</span>
+  </div>
+</div>
+</body>
+</html>
