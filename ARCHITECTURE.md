@@ -1,12 +1,12 @@
-# Solution Architecture
+# MedGUI — Architecture
 
 ## 1) Purpose and Scope
-This document explains the repository from three angles:
+This document explains the MedGUI codebase from three angles:
 1. available datasets and their structures,
-2. canonical data model used by the app,
+2. canonical data model shared across all sources,
 3. Streamlit + backend runtime workflow.
 
-The main integration point is the Streamlit application at `medgemma_gui/app.py`.
+The single entry point for all user interaction is the Streamlit application at `medgemma_gui/app.py`.
 
 ## 2) Dataset Inventory
 
@@ -98,7 +98,7 @@ The Streamlit app imports shared backend utilities from `medgemma_benchmark/run_
 - inference transport: `endpoint_chat_completion`
 - post-processing helpers: `sanitize_text`, `truncate_text`, `parse_diagnosis`
 
-This keeps transport/format logic centralized and reduces duplicate implementations.
+This centralises transport and format logic and avoids duplication between the GUI and benchmark runner.
 
 ## 6) End-to-End Runtime Sequence
 1. User selects dataset source and model backend in sidebar.
@@ -111,7 +111,7 @@ This keeps transport/format logic centralized and reduces duplicate implementati
 8. UI renders structured clinical output and stores it in session cache.
 
 ## 7) Extension Guidance
-- Add a new dataset by implementing a loader that outputs canonical case keys.
-- Keep prompt output contracts stable (JSON keys) to preserve parser/UI compatibility.
-- Prefer adding backend-specific logic behind dispatcher functions; avoid UI-layer branching explosion.
-- Keep ranking function independent of source schema by scoring canonical text fields only.
+- **New dataset**: implement a loader that transforms source rows into the canonical case schema (§3). Register it in the sidebar `dataset_choice` block.
+- **New LLM backend**: add a `call_<backend>(...)` function, a pair of system prompts, and a branch in `_run_inference()`. Keep the same JSON output contract so the parser/UI layer is unchanged.
+- **Prompt stability**: always return the same JSON keys (`diagnosis`, `confidence`, `rationale`, `key_findings`, `differential` for diagnosis; `plain_summary`, `image_findings`, `image_conclusion`, `next_steps` for explain). Changing key names breaks the parsing layer.
+- **Richness ranking**: `history_richness_score(...)` scores canonical text fields only — it is dataset-agnostic by design.

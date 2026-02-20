@@ -40,19 +40,14 @@ This folder contains scripts and data for the **PMC-Patients** dataset, sourced 
 
 ```
 PMCpatient/
-├── download_pmc_patients.py      ← Step 1: download raw data
-├── prepare_input_strategy.py     ← Step 2: convert to project JSONL
-├── README.md                     ← this file
-│
-│   (created after running scripts)
-├── PMC-Patients.csv              ← full CSV (167k rows, ~500 MB)
-├── PMC-Patients-V2.json          ← full JSON V2 (250k rows, ~1.5 GB)  [optional]
-├── PMC-Patients-sample-1000.csv  ← 1 000-row dev sample
-├── PMC-Patients_ehr_only.jsonl   ← converted JSONL (EHR-only strategy)
-├── PMC-Patients_structured.jsonl ← converted JSONL (structured strategy)
-├── PMC-Patients_qa.jsonl         ← converted JSONL (QA strategy)
-└── quality_report.json           ← auto-generated stats
+├── download_pmc_patients.py           ← Step 1: download raw data (optional)
+├── prepare_input_strategy.py          ← Step 2: convert to project JSONL (optional)
+├── README.md                          ← this file
+├── PMC-Patients-sample-1000.csv       ← 1 000-row dev sample (tracked in repo)
+└── quality_report.json                ← auto-generated stats
 ```
+
+> **Note:** The full `PMC-Patients.csv` (~520 MB) and all derived JSONL files are excluded from the repository (see `.gitignore`). Only the 1 000-row sample is committed because it is the only file loaded by the MedGUI Streamlit app. Run `bash scripts/recover_deleted_datasets.sh` to regenerate derived files locally.
 
 ---
 

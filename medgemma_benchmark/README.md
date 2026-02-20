@@ -15,10 +15,16 @@ Both modes use:
 - Model ID: `google/medgemma-1-5-4b-it-hae`
 - Endpoint: your Hugging Face Inference Endpoint URL
 
-## Security
+## Authentication
 
-Do **not** hardcode your token in files.
-Set it as an environment variable only.
+Credentials are read from `.streamlit/secrets.toml` (preferred) or environment variables — the same resolution logic used by the Streamlit app.
+
+```toml
+# .streamlit/secrets.toml
+HF_TOKEN = "hf_..."
+```
+
+Do **not** hardcode tokens in source files.
 
 ## Run
 

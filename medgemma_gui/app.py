@@ -506,7 +506,7 @@ def resolve_credential(candidate_keys: Tuple[str, ...]) -> Tuple[str, str, str]:
 
 def main() -> None:
     st.set_page_config(
-        page_title="MedPix Patient Assistant",
+        page_title="MedGUI — Medical AI Assistant",
         page_icon=":stethoscope:",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -609,7 +609,7 @@ def main() -> None:
     ) if sort_by_richness else cases
 
     # ── Header ───────────────────────────────────────────────────────────────
-    st.markdown("# MedPix Patient Assistant")
+    st.markdown("# MedGUI")
     st.caption(f"Active model: **{llm_choice}** — {model_id}")
     st.caption(f"Active dataset: **{dataset_choice}** ({active_dataset_path.name})")
 
