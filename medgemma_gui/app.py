@@ -33,6 +33,11 @@ from medgemma_benchmark.run_medgemma_benchmark import (
 DATASET_PATH = REPO_ROOT / "patient-ehr-image-dataset/full_dataset.jsonl"
 PMC_DATASET_PATH = REPO_ROOT / "PMCpatient/PMC-Patients-sample-1000.csv"
 SYNTHETIC_DATASET_PATH = REPO_ROOT / "Synthetic/synthetic_ehr_image_dataset.jsonl"
+# Representative MRI preview slices extracted from the Synthea coherent dataset.
+# Used as fallback images for Synthetic cases when the original DICOM ZIP is not
+# on disk (the ZIP was removed to reduce repo size).
+SYNTHETIC_MRI_SLICES_DIR = REPO_ROOT / "Synthetic" / "mri_slices"
+SYNTHETIC_FALLBACK_IMAGE_NAMES = ("axial_mid.png", "coronal_mid.png", "sagittal_mid.png")
 WORKSPACE_ROOT = REPO_ROOT
 PRESET_ENDPOINT_URL = "https://pcmy7bkqtqesrrzd.us-east-1.aws.endpoints.huggingface.cloud"
 PRESET_MODEL_ID = "google/medgemma-1-5-4b-it-hae"
@@ -66,7 +71,7 @@ MEDGEMMA_EXPLAIN_PROMPT = (
 
 MEDGEMMA_DIAGNOSIS_PROMPT = (
     "You are MedGemma, a specialist clinical diagnostic assistant. "
-    "Analyse the provided patient history, examination findings, imaging reports, and any attached images. "
+    "Analyse the provided patient history, examination findings, and any attached images. "
     "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
     "examination signs, and imaging characteristics to reach a single best diagnosis. "
     "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
@@ -94,7 +99,7 @@ GEMINI_EXPLAIN_PROMPT = (
 
 GEMINI_DIAGNOSIS_PROMPT = (
     "You are a specialist clinical diagnostic assistant. "
-    "Analyse all provided clinical history, examination findings, imaging reports, "
+    "Analyse all provided clinical history, examination findings, "
     "and any attached images.\n\n"
     "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
     "examination signs, and imaging characteristics.\n\n"
@@ -281,13 +286,83 @@ def load_pmc_cases(path_str: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def get_resolved_images(case: Dict[str, Any]) -> List[Path]:
+def get_resolved_images(case: Dict[str, Any]) -> Tuple[List[Path], bool]:
+    """Return (resolved_paths, is_fallback).
+
+    For Synthea cases whose DICOM images are stored inside the (deleted) ZIP,
+    falls back to the on-disk MRI preview slices so the viewer and LLM still
+    receive representative images.
+    """
     image_paths: List[Path] = []
     for raw_path in collect_image_paths(case):
         resolved = resolve_image_path(WORKSPACE_ROOT, raw_path)
         if resolved and resolved.exists():
             image_paths.append(resolved)
-    return image_paths
+
+    if image_paths:
+        return image_paths, False
+
+    # Fallback: Synthea cases whose images are inside the removed ZIP
+    if case.get("dataset_source", "") == "Synthea coherent zip" and case.get("images"):
+        fallback: List[Path] = []
+        for fname in SYNTHETIC_FALLBACK_IMAGE_NAMES:
+            p = SYNTHETIC_MRI_SLICES_DIR / fname
+            if p.exists():
+                fallback.append(p)
+        if fallback:
+            return fallback, True
+
+    return [], False
+
+
+def _build_image_context_text(
+    case: Dict[str, Any],
+    resolved_paths: List[Path],
+    is_fallback: bool,
+) -> str:
+    """Build a concise plain-text description of the images being passed to
+    the LLM so it understands what each image represents.
+
+    Injected into the EHR text *after* truncation so it is never cut off.
+    """
+    if not resolved_paths:
+        return ""
+
+    lines: List[str] = []
+    if is_fallback:
+        lines.append(
+            "[Note: Patient-specific DICOM images are stored in an archived ZIP "
+            "that is not currently on disk. The following representative MRI views "
+            "from the Synthea coherent dataset are provided for illustrative "
+            "imaging context only.]"
+        )
+
+    entries = case.get("images", [])
+    for i, path in enumerate(resolved_paths):
+        if is_fallback:
+            # Describe by filename stem (axial_mid / coronal_mid / sagittal_mid)
+            stem = path.stem.replace("_", " ")
+            lines.append(f"  Attached image {i + 1}: {stem} (representative MRI preview)")
+        else:
+            img_meta = entries[i] if i < len(entries) else {}
+            parts: List[str] = []
+            modality = sanitize_text(img_meta.get("modality") or img_meta.get("type") or "")
+            plane = sanitize_text(img_meta.get("plane") or "")
+            location = sanitize_text(img_meta.get("location") or "")
+            caption = sanitize_text(img_meta.get("caption") or "")
+            if modality:
+                parts.append(modality)
+            if plane:
+                parts.append(f"{plane} view")
+            if location:
+                parts.append(f"region: {location}")
+            if caption:
+                parts.append(f'Caption: "{caption}"')
+            desc = ", ".join(parts) if parts else "(no metadata)"
+            lines.append(f"  Attached image {i + 1}: {desc}")
+
+    header = "Imaging context (images attached):"
+    return header + "\n" + "\n".join(lines)
 
 
 def preview_payload(path: Path) -> Any:
@@ -659,7 +734,7 @@ def main() -> None:
     selected_case = next(c for c in cases if str(c.get("uid")) == selected_uid)
 
     # Resolve images early (needed by slider and inference)
-    resolved_images = get_resolved_images(selected_case)
+    resolved_images, _images_are_fallback = get_resolved_images(selected_case)
     _n_images = len(resolved_images)
     with st.sidebar:
         st.markdown("---")
@@ -673,6 +748,13 @@ def main() -> None:
         )
 
     composed_ehr = truncate_text(build_ehr_text(selected_case), target_ehr_chars)
+    # Append image metadata AFTER truncation so it is never cut off.
+    # This lets the LLM know what each attached image represents (modality,
+    # plane, anatomical region, caption from the dataset).
+    if resolved_images and use_images:
+        img_ctx = _build_image_context_text(selected_case, resolved_images[:max_images], _images_are_fallback)
+        if img_ctx:
+            composed_ehr = composed_ehr + "\n\n" + img_ctx
     effective_max_tokens = max_tokens
     if llm_choice == LLM_MEDGEMMA:
         effective_max_tokens = medgemma_token_budget(
@@ -802,10 +884,17 @@ def main() -> None:
     # ── Column 2: Linked Images ────────────────────────────────────────────
     with img_col:
         st.subheader("Linked Images")
-        st.caption(
-            f"{_n_images} image(s) linked to this case."
-            + (" Enable 'Preview images in viewer' in the sidebar to display them." if not show_linked_images else "")
-        )
+        if _images_are_fallback:
+            st.caption(
+                f"Patient-specific DICOM images are inside the removed ZIP archive. "
+                f"Showing {_n_images} representative MRI preview slice(s) from the "
+                f"Synthea dataset for visual context."
+            )
+        else:
+            st.caption(
+                f"{_n_images} image(s) linked to this case."
+                + (" Enable 'Preview images in viewer' in the sidebar to display them." if not show_linked_images else "")
+            )
         if show_linked_images and resolved_images:
             shown = resolved_images[:6]
             preview_items: List[Any] = []
