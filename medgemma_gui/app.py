@@ -33,11 +33,6 @@ from medgemma_benchmark.run_medgemma_benchmark import (
 DATASET_PATH = REPO_ROOT / "patient-ehr-image-dataset/full_dataset.jsonl"
 PMC_DATASET_PATH = REPO_ROOT / "PMCpatient/PMC-Patients-sample-1000.csv"
 SYNTHETIC_DATASET_PATH = REPO_ROOT / "Synthetic/synthetic_ehr_image_dataset.jsonl"
-# Representative MRI preview slices extracted from the Synthea coherent dataset.
-# Used as fallback images for Synthetic cases when the original DICOM ZIP is not
-# on disk (the ZIP was removed to reduce repo size).
-SYNTHETIC_MRI_SLICES_DIR = REPO_ROOT / "Synthetic" / "mri_slices"
-SYNTHETIC_FALLBACK_IMAGE_NAMES = ("axial_mid.png", "coronal_mid.png", "sagittal_mid.png")
 WORKSPACE_ROOT = REPO_ROOT
 PRESET_ENDPOINT_URL = "https://pcmy7bkqtqesrrzd.us-east-1.aws.endpoints.huggingface.cloud"
 PRESET_MODEL_ID = "google/medgemma-1-5-4b-it-hae"
@@ -61,9 +56,14 @@ LLM_GEMINI = "Gemini 2.5 Pro"
 MEDGEMMA_EXPLAIN_PROMPT = (
     "You are MedGemma, a medical vision-language model trained on clinical data. "
     "Your task: explain this clinical case to a patient or non-medical reader using simple, empathetic language. "
-    "Draw on all provided text and any images. "
+    "Base your explanation on ALL of the following sources of evidence, weighting them together:\n"
+    "  1. The patient's EHR text (history, exam findings, imaging reports) provided in the user message.\n"
+    "  2. Any attached medical images — describe what you observe without jargon.\n"
+    "  3. If a prior AI diagnostic result is present at the end of the system prompt, you MUST reference it "
+    "     explicitly: tell the patient what the diagnosis means in plain language and why the clinical findings "
+    "     support it. Do not contradict the diagnostic result.\n\n"
     "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
-    "  plain_summary    : 2-3 sentence plain-language overview of what is happening\n"
+    "  plain_summary    : 2-3 sentence plain-language overview of what is happening, grounded in the EHR facts\n"
     "  image_findings   : what the medical images show, described without jargon (empty string if no images)\n"
     "  image_conclusion : what those image findings mean for the patient (empty string if no images)\n"
     "  next_steps       : what typically happens next (tests, referrals, treatment)"
@@ -71,7 +71,7 @@ MEDGEMMA_EXPLAIN_PROMPT = (
 
 MEDGEMMA_DIAGNOSIS_PROMPT = (
     "You are MedGemma, a specialist clinical diagnostic assistant. "
-    "Analyse the provided patient history, examination findings, and any attached images. "
+    "Analyse the provided patient history, examination findings, imaging reports, and any attached images. "
     "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
     "examination signs, and imaging characteristics to reach a single best diagnosis. "
     "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
@@ -87,19 +87,23 @@ MEDGEMMA_DIAGNOSIS_PROMPT = (
 GEMINI_EXPLAIN_PROMPT = (
     "You are a medical explainer for patients and non-medical readers. "
     "Use plain, friendly, empathetic language. Avoid jargon.\n\n"
-    "If images are present, describe what you see visually, list key image findings, "
-    "and provide a clear conclusion the reader can understand.\n\n"
+    "Base your explanation on ALL of the following, weighting them together:\n"
+    "  1. The patient's EHR text (history, exam findings, imaging reports) in the user message.\n"
+    "  2. Any attached medical images — describe what you see visually.\n"
+    "  3. If a prior AI diagnostic result is appended to this system prompt, you MUST reference it "
+    "     explicitly: explain to the patient what the diagnosis means in plain language and why the "
+    "     available clinical facts support it. Do not contradict the diagnostic result.\n\n"
     "Return ONLY a single JSON object (no markdown, no code fences, no extra text) "
     "with exactly these four string keys:\n"
-    '  "plain_summary"    – 2-3 sentence overview of what is happening\n'
-    '  "image_findings"   – what the images show (empty string "" if none)\n'
+    '  "plain_summary"    – 2-3 sentence overview grounded in the EHR facts and (if present) the diagnostic result\n'
+    '  "image_findings"   – what the images show, described without jargon (empty string "" if none)\n'
     '  "image_conclusion" – what those findings mean for the patient (empty string "" if none)\n'
     '  "next_steps"       – what typically happens next (tests, referrals, treatment)\n'
 )
 
 GEMINI_DIAGNOSIS_PROMPT = (
     "You are a specialist clinical diagnostic assistant. "
-    "Analyse all provided clinical history, examination findings, "
+    "Analyse all provided clinical history, examination findings, imaging reports, "
     "and any attached images.\n\n"
     "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
     "examination signs, and imaging characteristics.\n\n"
@@ -172,18 +176,41 @@ def parse_markdown_fields(text: str) -> Dict[str, str]:
     return result
 
 
+def build_grounded_explain_prompt(base_prompt: str, diagnosis_json: Dict[str, Any]) -> str:
+    """Enrich the plain-language explain system prompt with a prior LLM diagnostic result.
+
+    When a diagnosis has already been produced for this case, we inject the key
+    clinical facts into the system prompt so the non-medical explanation is
+    consistent with and grounded in the diagnostic outcome.
+    """
+    if not diagnosis_json:
+        return base_prompt
+
+    diag = sanitize_text(diagnosis_json.get("diagnosis", ""))
+    confidence = sanitize_text(diagnosis_json.get("confidence", ""))
+    rationale = sanitize_text(diagnosis_json.get("rationale", ""))
+    key_findings = sanitize_text(diagnosis_json.get("key_findings", ""))
+
+    if not diag:
+        return base_prompt
+
+    parts = ["\n\n── Prior AI Diagnostic Result (use this to ground your explanation) ──"]
+    parts.append(f"Diagnosis: {diag}" + (f" (Confidence: {confidence})" if confidence else ""))
+    if rationale:
+        parts.append(f"Rationale: {rationale}")
+    if key_findings:
+        parts.append(f"Key supporting findings: {key_findings}")
+    parts.append(
+        "\nYour plain-language explanation MUST be consistent with the above diagnosis. "
+        "Translate these clinical facts into terms a non-medical person can easily understand. "
+        "Explain WHY the findings led to this diagnosis without using technical jargon."
+    )
+    return base_prompt + "\n".join(parts)
+
+
 def _is_oom_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "out of memory" in message or "cuda" in message
-
-
-def _is_cuda_kernel_error(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return (
-        "cuda error" in message
-        or "misaligned address" in message
-        or "device-side assertions" in message
-    )
 
 
 def medgemma_token_budget(
@@ -286,85 +313,13 @@ def load_pmc_cases(path_str: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def get_resolved_images(case: Dict[str, Any]) -> Tuple[List[Tuple[Path, Dict[str, Any]]], bool]:
-    """Return (resolved_images, is_fallback), where each item is
-    (resolved_path, original_image_metadata).
-
-    For Synthea cases whose DICOM images are stored inside the (deleted) ZIP,
-    falls back to the on-disk MRI preview slices so the viewer and LLM still
-    receive representative images.
-    """
-    resolved_images: List[Tuple[Path, Dict[str, Any]]] = []
-    for image in case.get("images", []):
-        raw_path = image.get("file_path")
-        if not raw_path:
-            continue
-        raw_path = str(raw_path)
+def get_resolved_images(case: Dict[str, Any]) -> List[Path]:
+    image_paths: List[Path] = []
+    for raw_path in collect_image_paths(case):
         resolved = resolve_image_path(WORKSPACE_ROOT, raw_path)
         if resolved and resolved.exists():
-            resolved_images.append((resolved, image))
-
-    if resolved_images:
-        return resolved_images, False
-
-    # Fallback: Synthea cases whose images are inside the removed ZIP
-    if case.get("dataset_source", "") == "Synthea coherent zip" and case.get("images"):
-        fallback: List[Tuple[Path, Dict[str, Any]]] = []
-        for fname in SYNTHETIC_FALLBACK_IMAGE_NAMES:
-            p = SYNTHETIC_MRI_SLICES_DIR / fname
-            if p.exists():
-                fallback.append((p, {"type": "MRI", "plane": p.stem.replace("_mid", "")}))
-        if fallback:
-            return fallback, True
-
-    return [], False
-
-
-def _build_image_context_text(
-    resolved_images: List[Tuple[Path, Dict[str, Any]]],
-    is_fallback: bool,
-) -> str:
-    """Build a concise plain-text description of the images being passed to
-    the LLM so it understands what each image represents.
-
-    Injected into the EHR text *after* truncation so it is never cut off.
-    """
-    if not resolved_images:
-        return ""
-
-    lines: List[str] = []
-    if is_fallback:
-        lines.append(
-            "[Note: Patient-specific DICOM images are stored in an archived ZIP "
-            "that is not currently on disk. The following representative MRI views "
-            "from the Synthea coherent dataset are provided for illustrative "
-            "imaging context only.]"
-        )
-
-    for i, (path, img_meta) in enumerate(resolved_images):
-        if is_fallback:
-            # Describe by filename stem (axial_mid / coronal_mid / sagittal_mid)
-            stem = path.stem.replace("_", " ")
-            lines.append(f"  Attached image {i + 1}: {stem} (representative MRI preview)")
-        else:
-            parts: List[str] = []
-            modality = sanitize_text(img_meta.get("modality") or img_meta.get("type") or "")
-            plane = sanitize_text(img_meta.get("plane") or "")
-            location = sanitize_text(img_meta.get("location") or "")
-            caption = sanitize_text(img_meta.get("caption") or "")
-            if modality:
-                parts.append(modality)
-            if plane:
-                parts.append(f"{plane} view")
-            if location:
-                parts.append(f"region: {location}")
-            if caption:
-                parts.append(f'Caption: "{caption}"')
-            desc = ", ".join(parts) if parts else "(no metadata)"
-            lines.append(f"  Attached image {i + 1}: {desc}")
-
-    header = "Imaging context (images attached):"
-    return header + "\n" + "\n".join(lines)
+            image_paths.append(resolved)
+    return image_paths
 
 
 def preview_payload(path: Path) -> Any:
@@ -410,7 +365,7 @@ def call_medgemma(
     effective_tokens = max_tokens
     effective_ehr = ehr_text
 
-    for attempt in range(5):
+    for attempt in range(4):
         messages = [
             {"role": "system", "content": system_prompt},
             {
@@ -437,27 +392,13 @@ def call_medgemma(
                 retry_backoff_sec=2.0,
             )
         except Exception as exc:
-            if attempt == 4:
+            if not _is_oom_error(exc) or attempt == 3:
                 raise
 
-            if _is_oom_error(exc):
-                effective_tokens = max(32, int(effective_tokens * 0.7))
-                effective_ehr = truncate_text(effective_ehr, max(120, int(len(effective_ehr) * 0.7)))
-                if effective_images > 0:
-                    effective_images -= 1
-                continue
-
-            if _is_cuda_kernel_error(exc):
-                # Endpoint-side CUDA kernel instability is often triggered by heavier multimodal requests.
-                # Degrade request load progressively before giving up.
-                if effective_images > 0:
-                    effective_images -= 1
-                else:
-                    effective_tokens = max(64, int(effective_tokens * 0.7))
-                    effective_ehr = truncate_text(effective_ehr, max(180, int(len(effective_ehr) * 0.8)))
-                continue
-
-            raise
+            effective_tokens = max(32, int(effective_tokens * 0.7))
+            effective_ehr = truncate_text(effective_ehr, max(120, int(len(effective_ehr) * 0.7)))
+            if effective_images > 0:
+                effective_images -= 1
 
     raise RuntimeError("Inference failed after adaptive retries.")
 
@@ -736,9 +677,8 @@ def main() -> None:
     selected_case = next(c for c in cases if str(c.get("uid")) == selected_uid)
 
     # Resolve images early (needed by slider and inference)
-    resolved_images, _images_are_fallback = get_resolved_images(selected_case)
-    resolved_image_paths = [p for p, _meta in resolved_images]
-    _n_images = len(resolved_image_paths)
+    resolved_images = get_resolved_images(selected_case)
+    _n_images = len(resolved_images)
     with st.sidebar:
         st.markdown("---")
         max_images = st.slider(
@@ -751,19 +691,12 @@ def main() -> None:
         )
 
     composed_ehr = truncate_text(build_ehr_text(selected_case), target_ehr_chars)
-    # Append image metadata AFTER truncation so it is never cut off.
-    # This lets the LLM know what each attached image represents (modality,
-    # plane, anatomical region, caption from the dataset).
-    if resolved_images and use_images:
-        img_ctx = _build_image_context_text(resolved_images[:max_images], _images_are_fallback)
-        if img_ctx:
-            composed_ehr = composed_ehr + "\n\n" + img_ctx
     effective_max_tokens = max_tokens
     if llm_choice == LLM_MEDGEMMA:
         effective_max_tokens = medgemma_token_budget(
             requested_tokens=max_tokens,
             ehr_text=composed_ehr,
-            image_count=min(max_images, len(resolved_image_paths)),
+            image_count=min(max_images, len(resolved_images)),
             use_images=use_images,
         )
 
@@ -811,7 +744,7 @@ def main() -> None:
                 model_id=model_id,
                 system_prompt=system_prompt,
                 ehr_text=composed_ehr,
-                image_paths=resolved_image_paths,
+                image_paths=resolved_images,
                 use_images=use_images,
                 max_images=max_images,
                 max_tokens=effective_max_tokens,
@@ -824,7 +757,7 @@ def main() -> None:
                 model_name=model_id,
                 system_prompt=system_prompt,
                 ehr_text=composed_ehr,
-                image_paths=resolved_image_paths,
+                image_paths=resolved_images,
                 use_images=use_images,
                 max_images=max_images,
                 max_tokens=effective_max_tokens,
@@ -839,9 +772,12 @@ def main() -> None:
     if run_explain and active_credential:
         st.session_state[_ek] = ""
         st.session_state[_ee] = ""
+        # Ground the explanation in any pre-existing diagnostic result for this case.
+        prior_diagnosis_json = parse_json_object(st.session_state.get(_dk, ""))
+        grounded_explain_prompt = build_grounded_explain_prompt(explain_prompt, prior_diagnosis_json)
         with st.spinner(f"[{llm_choice}] Generating explanation..."):
             try:
-                st.session_state[_ek] = _run_inference(explain_prompt)
+                st.session_state[_ek] = _run_inference(grounded_explain_prompt)
             except Exception as exc:
                 st.session_state[_ee] = str(exc)
 
@@ -859,13 +795,14 @@ def main() -> None:
     diagnosis_output = st.session_state.get(_dk, "")
     diagnosis_error  = st.session_state.get(_de, "")
 
-    # ── Unified three-panel layout ─────────────────────────────────────────
-    # All three panels (EHR · Images · AI Insights) sit side-by-side so the
-    # user can cross-reference AI output against the source data without any
-    # tab switching.
-    ehr_col, img_col, ai_col = st.columns([1.2, 1.0, 1.4])
+    # ── Unified 3-panel layout: EHR | AI Insights | Images ──────────────────
+    # All three panels are always co-visible so the user can associate the
+    # diagnostic result with the original records and images without switching tabs.
+    ehr_col, ai_col, img_col = st.columns([1.05, 1.15, 0.95])
 
-    # ── Column 1: EHR Record ───────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────────────
+    # PANEL 1 — EHR Record
+    # ────────────────────────────────────────────────────────────────────────
     with ehr_col:
         st.subheader("EHR Record")
         st.markdown(
@@ -884,22 +821,155 @@ def main() -> None:
         with st.expander("Imaging Findings", expanded=True):
             st.write(sanitize_text(selected_case.get("findings", "")) or "Not available")
 
-    # ── Column 2: Linked Images ────────────────────────────────────────────
-    with img_col:
-        st.subheader("Linked Images")
-        if _images_are_fallback:
-            st.caption(
-                f"Patient-specific DICOM images are inside the removed ZIP archive. "
-                f"Showing {_n_images} representative MRI preview slice(s) from the "
-                f"Synthea dataset for visual context."
+    # ────────────────────────────────────────────────────────────────────────
+    # PANEL 2 — AI Insights (Diagnostic Result + Grounded Explanation)
+    # Rendered alongside the EHR and images so findings are immediately
+    # associable with the source records.
+    # ────────────────────────────────────────────────────────────────────────
+    with ai_col:
+        st.subheader("AI Insights")
+        has_results = bool(explain_output or explain_error or diagnosis_output or diagnosis_error)
+
+        if not has_results:
+            st.info(
+                "No AI results yet for this patient with the selected model. "
+                "Use the **Diagnose** or **Explain** buttons above to run inference."
             )
         else:
+            # ── Diagnostic Result ───────────────────────────────────────────
+            st.markdown("##### Clinical Diagnostic Result")
+            if diagnosis_error:
+                st.error(f"Request failed: {diagnosis_error}")
+            elif diagnosis_output:
+                # 1) Try JSON
+                diagnosis_json = parse_json_object(diagnosis_output)
+                diagnosis_text = sanitize_text(diagnosis_json.get("diagnosis", "")) if diagnosis_json else ""
+                rationale_text = sanitize_text(diagnosis_json.get("rationale", "")) if diagnosis_json else ""
+                confidence_text = sanitize_text(diagnosis_json.get("confidence", "")) if diagnosis_json else ""
+                key_findings_text = sanitize_text(diagnosis_json.get("key_findings", "")) if diagnosis_json else ""
+                differential_text = sanitize_text(diagnosis_json.get("differential", "")) if diagnosis_json else ""
+
+                # 2) Try markdown **Key:** Value (Gemini chain-of-thought style)
+                if not diagnosis_text or not rationale_text:
+                    md = parse_markdown_fields(diagnosis_output)
+                    if not diagnosis_text:
+                        diagnosis_text = sanitize_text(
+                            md.get("final_diagnosis", "")
+                            or md.get("revised_diagnosis", "")
+                            or md.get("diagnosis", "")
+                        )
+                    if not rationale_text:
+                        rationale_text = sanitize_text(
+                            md.get("final_rationale", "")
+                            or md.get("revised_rationale", "")
+                            or md.get("rationale", "")
+                        )
+                    if not confidence_text:
+                        confidence_text = sanitize_text(md.get("confidence", ""))
+                    if not key_findings_text:
+                        key_findings_text = sanitize_text(md.get("key_findings", ""))
+                    if not differential_text:
+                        differential_text = sanitize_text(md.get("differential", ""))
+
+                # 3) Last-resort heuristic for diagnosis only
+                if not diagnosis_text:
+                    diagnosis_text = parse_diagnosis(diagnosis_output)
+
+                _conf_colour = {"high": "#1a7f37", "moderate": "#b45309", "low": "#b91c1c"}
+                _conf_label = confidence_text or ""
+                _conf_style = _conf_colour.get(_conf_label.lower(), "#1f77b4")
+                conf_badge = (
+                    f" <span style='background:{_conf_style};color:white;padding:2px 8px;"
+                    f"border-radius:10px;font-size:0.75rem;'>{_conf_label}</span>"
+                    if _conf_label else ""
+                )
+
+                if diagnosis_text:
+                    st.markdown(
+                        f"<div style='background:#f0fdf4;border-left:4px solid #16a34a;"
+                        f"padding:10px 14px;border-radius:4px;font-size:1.05rem;'>"
+                        f"<strong>Diagnosis:</strong> {diagnosis_text}{conf_badge}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.warning("Diagnosis could not be extracted — see raw output below.")
+
+                if rationale_text:
+                    st.markdown(f"**Rationale:** {rationale_text}")
+                if key_findings_text:
+                    st.markdown(f"**Key findings:** {key_findings_text}")
+                if differential_text:
+                    st.markdown(f"**Differential:** {differential_text}")
+
+                with st.expander("Raw diagnostic output"):
+                    st.code(diagnosis_output)
+            else:
+                st.caption("Run **Diagnose** to see a clinical diagnostic result here.")
+
+            st.divider()
+
+            # ── Plain-Language Explanation (grounded in EHR facts + diagnosis) ──
+            st.markdown("##### Plain-Language Explanation")
             st.caption(
-                f"{_n_images} image(s) linked to this case."
-                + (" Enable 'Preview images in viewer' in the sidebar to display them." if not show_linked_images else "")
+                "Explanation is grounded in the EHR record and the diagnostic result above — "
+                "run **Diagnose** first to maximise relevance."
             )
-        if show_linked_images and resolved_image_paths:
-            shown = resolved_image_paths[:6]
+            if explain_error:
+                st.error(f"Request failed: {explain_error}")
+            elif explain_output:
+                explain_json = parse_json_object(explain_output)
+                if explain_json:
+                    summary_text = sanitize_text(explain_json.get("plain_summary", ""))
+                    findings_text = sanitize_text(
+                        explain_json.get("image_findings", "")
+                        or explain_json.get("image_interpretation", "")
+                    )
+                    conclusion_text = sanitize_text(
+                        explain_json.get("image_conclusion", "")
+                        or explain_json.get("conclusion", "")
+                    )
+                    next_steps_text = sanitize_text(explain_json.get("next_steps", ""))
+                else:
+                    # Fallback: markdown **Key:** Value
+                    md = parse_markdown_fields(explain_output)
+                    summary_text = sanitize_text(
+                        md.get("plain_summary", "") or md.get("summary", "")
+                    )
+                    findings_text = sanitize_text(
+                        md.get("image_findings", "") or md.get("image_interpretation", "")
+                    )
+                    conclusion_text = sanitize_text(
+                        md.get("image_conclusion", "") or md.get("conclusion", "")
+                    )
+                    next_steps_text = sanitize_text(md.get("next_steps", ""))
+
+                if summary_text:
+                    st.info(summary_text)
+                elif not any([findings_text, conclusion_text, next_steps_text]):
+                    st.write(explain_output)
+                for label, value in [
+                    ("What the images show", findings_text),
+                    ("What this means", conclusion_text),
+                    ("What happens next", next_steps_text),
+                ]:
+                    if value:
+                        st.markdown(f"**{label}:** {value}")
+                with st.expander("Raw explanation output"):
+                    st.code(explain_output)
+            else:
+                st.caption("Run **Explain** to see a plain-language explanation here.")
+
+    # ────────────────────────────────────────────────────────────────────────
+    # PANEL 3 — Linked Images
+    # ────────────────────────────────────────────────────────────────────────
+    with img_col:
+        st.subheader("Linked Images")
+        st.caption(
+            f"{_n_images} image(s) linked to this case."
+            + (" Disable 'Preview images in viewer' in the sidebar to hide." if show_linked_images else " Enable 'Preview images in viewer' in the sidebar to display.")
+        )
+        if show_linked_images and resolved_images:
+            shown = resolved_images[:6]
             preview_items: List[Any] = []
             captions: List[str] = []
             skipped = 0
@@ -920,135 +990,6 @@ def main() -> None:
                 st.caption(f"{skipped} image(s) could not be rendered for preview.")
         elif show_linked_images:
             st.info("No linked images found on disk for this case.")
-
-    # ── Column 3: AI Insights (Diagnosis + Plain-Language Explanation) ─────
-    with ai_col:
-        has_results = bool(explain_output or explain_error or diagnosis_output or diagnosis_error)
-
-        # ── 3a: Diagnostic Result ──────────────────────────────────────────
-        st.subheader("Diagnostic Result")
-        if diagnosis_error:
-            st.error(f"Request failed: {diagnosis_error}")
-        elif diagnosis_output:
-            # 1) Try JSON
-            diagnosis_json = parse_json_object(diagnosis_output)
-            diagnosis_text = sanitize_text(diagnosis_json.get("diagnosis", "")) if diagnosis_json else ""
-            rationale_text = sanitize_text(diagnosis_json.get("rationale", "")) if diagnosis_json else ""
-            confidence_text = sanitize_text(diagnosis_json.get("confidence", "")) if diagnosis_json else ""
-            key_findings_text = sanitize_text(diagnosis_json.get("key_findings", "")) if diagnosis_json else ""
-            differential_text = sanitize_text(diagnosis_json.get("differential", "")) if diagnosis_json else ""
-
-            # 2) Try markdown **Key:** Value (Gemini chain-of-thought style)
-            if not diagnosis_text or not rationale_text:
-                md = parse_markdown_fields(diagnosis_output)
-                if not diagnosis_text:
-                    diagnosis_text = sanitize_text(
-                        md.get("final_diagnosis", "")
-                        or md.get("revised_diagnosis", "")
-                        or md.get("diagnosis", "")
-                    )
-                if not rationale_text:
-                    rationale_text = sanitize_text(
-                        md.get("final_rationale", "")
-                        or md.get("revised_rationale", "")
-                        or md.get("rationale", "")
-                    )
-                if not confidence_text:
-                    confidence_text = sanitize_text(md.get("confidence", ""))
-                if not key_findings_text:
-                    key_findings_text = sanitize_text(md.get("key_findings", ""))
-                if not differential_text:
-                    differential_text = sanitize_text(md.get("differential", ""))
-
-            # 3) Last-resort heuristic for diagnosis only
-            if not diagnosis_text:
-                diagnosis_text = parse_diagnosis(diagnosis_output)
-
-            # ── Display ──
-            _conf_colour = {"high": "#1a7f37", "moderate": "#b45309", "low": "#b91c1c"}
-            _conf_label = confidence_text or ""
-            _conf_style = _conf_colour.get(_conf_label.lower(), "#1f77b4")
-            conf_badge = (
-                f" <span style='background:{_conf_style};color:white;padding:2px 8px;"
-                f"border-radius:10px;font-size:0.75rem;'>{_conf_label}</span>"
-                if _conf_label else ""
-            )
-
-            if diagnosis_text:
-                st.markdown(
-                    f"<div style='background:#f0fdf4;border-left:4px solid #16a34a;"
-                    f"padding:10px 14px;border-radius:4px;font-size:1.05rem;'>"
-                    f"<strong>Diagnosis:</strong> {diagnosis_text}{conf_badge}</div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.warning("Diagnosis could not be extracted — see raw output below.")
-
-            if rationale_text:
-                st.markdown(f"**Rationale:** {rationale_text}")
-            if key_findings_text:
-                st.markdown(f"**Key findings:** {key_findings_text}")
-            if differential_text:
-                st.markdown(f"**Differential:** {differential_text}")
-
-            with st.expander("Raw output"):
-                st.code(diagnosis_output)
-        elif not has_results:
-            st.caption("Click **Diagnose** above to generate a clinical diagnostic result.")
-        else:
-            st.caption("Run 'Diagnose' to see results here.")
-
-        st.divider()
-
-        # ── 3b: Plain-Language Explanation ────────────────────────────────
-        st.subheader("Plain-Language Explanation")
-        if explain_error:
-            st.error(f"Request failed: {explain_error}")
-        elif explain_output:
-            explain_json = parse_json_object(explain_output)
-            if explain_json:
-                summary_text = sanitize_text(explain_json.get("plain_summary", ""))
-                findings_text = sanitize_text(
-                    explain_json.get("image_findings", "")
-                    or explain_json.get("image_interpretation", "")
-                )
-                conclusion_text = sanitize_text(
-                    explain_json.get("image_conclusion", "")
-                    or explain_json.get("conclusion", "")
-                )
-                next_steps_text = sanitize_text(explain_json.get("next_steps", ""))
-            else:
-                # Fallback: markdown **Key:** Value
-                md = parse_markdown_fields(explain_output)
-                summary_text = sanitize_text(
-                    md.get("plain_summary", "") or md.get("summary", "")
-                )
-                findings_text = sanitize_text(
-                    md.get("image_findings", "") or md.get("image_interpretation", "")
-                )
-                conclusion_text = sanitize_text(
-                    md.get("image_conclusion", "") or md.get("conclusion", "")
-                )
-                next_steps_text = sanitize_text(md.get("next_steps", ""))
-
-            if summary_text:
-                st.info(summary_text)
-            elif not any([findings_text, conclusion_text, next_steps_text]):
-                # Nothing structured — show raw
-                st.write(explain_output)
-            for label, value in [
-                ("Image findings", findings_text),
-                ("Image conclusion", conclusion_text),
-                ("Next steps", next_steps_text),
-            ]:
-                if value:
-                    st.markdown(f"**{label}:** {value}")
-            with st.expander("Raw output"):
-                st.code(explain_output)
-        elif not has_results:
-            st.caption("Click **Explain (non-medical)** above to generate a plain-language summary.")
-        else:
-            st.caption("Run 'Explain' to see results here.")
 
 
 if __name__ == "__main__":

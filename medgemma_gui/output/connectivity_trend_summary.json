@@ -1,0 +1,34 @@
+{
+  "history_size": 0,
+  "latest_generated_at_utc": null,
+  "services": {
+    "medgemma": {
+      "total_runs": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0,
+        "unknown": 0
+      },
+      "pass_rate": 0.0,
+      "fail_rate": 0.0,
+      "avg_latency_sec": null,
+      "p95_latency_sec": null,
+      "recent_5_statuses": []
+    },
+    "gemini": {
+      "total_runs": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0,
+        "unknown": 0
+      },
+      "pass_rate": 0.0,
+      "fail_rate": 0.0,
+      "avg_latency_sec": null,
+      "p95_latency_sec": null,
+      "recent_5_statuses": []
+    }
+  }
+}

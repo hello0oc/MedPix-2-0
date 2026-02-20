@@ -1,0 +1,41 @@
+name: MedGUI V&V Offline
+
+on:
+  pull_request:
+    paths:
+      - medgemma_gui/**
+      - tests/**
+      - requirements-test.txt
+      - .github/workflows/medgui-vv-offline.yml
+  push:
+    branches: [main]
+    paths:
+      - medgemma_gui/**
+      - tests/**
+      - requirements-test.txt
+      - .github/workflows/medgui-vv-offline.yml
+
+jobs:
+  medgui-offline-vv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+
+      - name: Run offline MedGUI V&V tests
+        run: |
+          pytest -q \
+            tests/test_medgui_vv_offline.py \
+            tests/test_medgui_ui_smoke_mocked.py \
+            tests/test_model_output_contract.py

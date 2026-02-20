@@ -1,0 +1,57 @@
+name: MedGUI Connectivity Nightly
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  connectivity-check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install connectivity dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-connectivity.txt
+
+      - name: Run non-blocking connectivity checks
+        env:
+          HF_ENDPOINT_URL: ${{ secrets.HF_ENDPOINT_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_MODEL_ID: ${{ vars.HF_MODEL_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL_ID: ${{ vars.GEMINI_MODEL_ID }}
+        run: |
+          python scripts/nightly_connectivity_check.py --output medgemma_gui/output/connectivity_report.json
+
+      - name: Archive timestamped report and build trend summary
+        if: always()
+        run: |
+          mkdir -p medgemma_gui/output/connectivity_history
+          ts=$(date -u +"%Y%m%dT%H%M%SZ")
+          cp medgemma_gui/output/connectivity_report.json "medgemma_gui/output/connectivity_history/connectivity_report_${ts}.json"
+          python scripts/summarize_connectivity_trends.py \
+            --history-dir medgemma_gui/output/connectivity_history \
+            --output-json medgemma_gui/output/connectivity_trend_summary.json \
+            --output-md medgemma_gui/output/connectivity_trend_summary.md
+
+      - name: Upload connectivity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medgui-connectivity-report
+          path: |
+            medgemma_gui/output/connectivity_report.json
+            medgemma_gui/output/connectivity_trend_summary.json
+            medgemma_gui/output/connectivity_trend_summary.md
+            medgemma_gui/output/connectivity_history/

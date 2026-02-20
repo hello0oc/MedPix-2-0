@@ -97,9 +97,8 @@ def collect_image_paths(record: Dict[str, Any]) -> List[str]:
         if not raw_path:
             continue
         raw_path = str(raw_path)
-        # Be permissive: keep any non-empty path.
-        # Some datasets may have stale on_disk flags while files are actually present.
-        paths.append(raw_path)
+        if image.get("on_disk") or "::" in raw_path:
+            paths.append(raw_path)
     return paths
 
 
@@ -493,16 +492,7 @@ def endpoint_chat_completion(
                 return json.loads(raw)
             except error.HTTPError as exc:
                 raw = exc.read().decode("utf-8", errors="replace")
-                raw_lower = raw.lower()
-                transient_cuda_400 = (
-                    exc.code == 400
-                    and (
-                        "cuda error" in raw_lower
-                        or "misaligned address" in raw_lower
-                        or "device-side assertions" in raw_lower
-                    )
-                )
-                retryable = exc.code in {429, 500, 502, 503, 504} or transient_cuda_400
+                retryable = exc.code in {429, 500, 502, 503, 504}
                 if retryable and attempt < retries:
                     retry_after_header = exc.headers.get("Retry-After") if exc.headers else None
                     retry_after_seconds: Optional[float] = None
@@ -518,13 +508,6 @@ def endpoint_chat_completion(
 
                     time.sleep(min(60.0, max(0.1, retry_after_seconds)))
                     continue
-                if transient_cuda_400:
-                    raise RuntimeError(
-                        "Endpoint HTTP 400 with transient CUDA kernel failure. "
-                        "This is usually endpoint-side instability; retry after a short wait, "
-                        "or reduce image count / output tokens. "
-                        f"URL: {url}. Response: {raw[:1200]}"
-                    ) from exc
                 if exc.code == 503:
                     raise RuntimeError(
                         "Endpoint HTTP 503 Service Unavailable. "

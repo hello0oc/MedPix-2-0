@@ -1,0 +1,13 @@
+{
+  "generated_at_utc": "2026-02-20T11:50:49.782280+00:00",
+  "checks": {
+    "medgemma": {
+      "status": "skipped",
+      "reason": "HF_ENDPOINT_URL or HF_TOKEN not set"
+    },
+    "gemini": {
+      "status": "skipped",
+      "reason": "GEMINI_API_KEY not set"
+    }
+  }
+}
