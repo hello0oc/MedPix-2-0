@@ -19,6 +19,7 @@ import base64
 import hashlib
 import io
 import json
+import random
 import os
 import re
 import shutil
@@ -96,8 +97,9 @@ def collect_image_paths(record: Dict[str, Any]) -> List[str]:
         if not raw_path:
             continue
         raw_path = str(raw_path)
-        if image.get("on_disk") or "::" in raw_path:
-            paths.append(raw_path)
+        # Be permissive: keep any non-empty path.
+        # Some datasets may have stale on_disk flags while files are actually present.
+        paths.append(raw_path)
     return paths
 
 
@@ -491,10 +493,45 @@ def endpoint_chat_completion(
                 return json.loads(raw)
             except error.HTTPError as exc:
                 raw = exc.read().decode("utf-8", errors="replace")
-                retryable = exc.code in {429, 500, 502, 503, 504}
+                raw_lower = raw.lower()
+                transient_cuda_400 = (
+                    exc.code == 400
+                    and (
+                        "cuda error" in raw_lower
+                        or "misaligned address" in raw_lower
+                        or "device-side assertions" in raw_lower
+                    )
+                )
+                retryable = exc.code in {429, 500, 502, 503, 504} or transient_cuda_400
                 if retryable and attempt < retries:
-                    time.sleep(retry_backoff_sec * (2 ** attempt))
+                    retry_after_header = exc.headers.get("Retry-After") if exc.headers else None
+                    retry_after_seconds: Optional[float] = None
+                    if retry_after_header:
+                        try:
+                            retry_after_seconds = float(retry_after_header)
+                        except ValueError:
+                            retry_after_seconds = None
+
+                    if retry_after_seconds is None:
+                        # Exponential backoff + small jitter avoids synchronized retry storms.
+                        retry_after_seconds = retry_backoff_sec * (2 ** attempt) + random.uniform(0, 0.75)
+
+                    time.sleep(min(60.0, max(0.1, retry_after_seconds)))
                     continue
+                if transient_cuda_400:
+                    raise RuntimeError(
+                        "Endpoint HTTP 400 with transient CUDA kernel failure. "
+                        "This is usually endpoint-side instability; retry after a short wait, "
+                        "or reduce image count / output tokens. "
+                        f"URL: {url}. Response: {raw[:1200]}"
+                    ) from exc
+                if exc.code == 503:
+                    raise RuntimeError(
+                        "Endpoint HTTP 503 Service Unavailable. "
+                        "The model endpoint is temporarily unavailable or warming up; "
+                        "wait 1-2 minutes and retry, or increase retries/backoff in the app. "
+                        f"URL: {url}. Response: {raw[:1200]}"
+                    ) from exc
                 raise RuntimeError(
                     f"Endpoint HTTP {exc.code} at {url}. Response: {raw[:1200]}"
                 ) from exc

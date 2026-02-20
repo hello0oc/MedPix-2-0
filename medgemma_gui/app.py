@@ -286,29 +286,34 @@ def load_pmc_cases(path_str: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def get_resolved_images(case: Dict[str, Any]) -> Tuple[List[Path], bool]:
-    """Return (resolved_paths, is_fallback).
+def get_resolved_images(case: Dict[str, Any]) -> Tuple[List[Tuple[Path, Dict[str, Any]]], bool]:
+    """Return (resolved_images, is_fallback), where each item is
+    (resolved_path, original_image_metadata).
 
     For Synthea cases whose DICOM images are stored inside the (deleted) ZIP,
     falls back to the on-disk MRI preview slices so the viewer and LLM still
     receive representative images.
     """
-    image_paths: List[Path] = []
-    for raw_path in collect_image_paths(case):
+    resolved_images: List[Tuple[Path, Dict[str, Any]]] = []
+    for image in case.get("images", []):
+        raw_path = image.get("file_path")
+        if not raw_path:
+            continue
+        raw_path = str(raw_path)
         resolved = resolve_image_path(WORKSPACE_ROOT, raw_path)
         if resolved and resolved.exists():
-            image_paths.append(resolved)
+            resolved_images.append((resolved, image))
 
-    if image_paths:
-        return image_paths, False
+    if resolved_images:
+        return resolved_images, False
 
     # Fallback: Synthea cases whose images are inside the removed ZIP
     if case.get("dataset_source", "") == "Synthea coherent zip" and case.get("images"):
-        fallback: List[Path] = []
+        fallback: List[Tuple[Path, Dict[str, Any]]] = []
         for fname in SYNTHETIC_FALLBACK_IMAGE_NAMES:
             p = SYNTHETIC_MRI_SLICES_DIR / fname
             if p.exists():
-                fallback.append(p)
+                fallback.append((p, {"type": "MRI", "plane": p.stem.replace("_mid", "")}))
         if fallback:
             return fallback, True
 
@@ -316,8 +321,7 @@ def get_resolved_images(case: Dict[str, Any]) -> Tuple[List[Path], bool]:
 
 
 def _build_image_context_text(
-    case: Dict[str, Any],
-    resolved_paths: List[Path],
+    resolved_images: List[Tuple[Path, Dict[str, Any]]],
     is_fallback: bool,
 ) -> str:
     """Build a concise plain-text description of the images being passed to
@@ -325,7 +329,7 @@ def _build_image_context_text(
 
     Injected into the EHR text *after* truncation so it is never cut off.
     """
-    if not resolved_paths:
+    if not resolved_images:
         return ""
 
     lines: List[str] = []
@@ -337,14 +341,12 @@ def _build_image_context_text(
             "imaging context only.]"
         )
 
-    entries = case.get("images", [])
-    for i, path in enumerate(resolved_paths):
+    for i, (path, img_meta) in enumerate(resolved_images):
         if is_fallback:
             # Describe by filename stem (axial_mid / coronal_mid / sagittal_mid)
             stem = path.stem.replace("_", " ")
             lines.append(f"  Attached image {i + 1}: {stem} (representative MRI preview)")
         else:
-            img_meta = entries[i] if i < len(entries) else {}
             parts: List[str] = []
             modality = sanitize_text(img_meta.get("modality") or img_meta.get("type") or "")
             plane = sanitize_text(img_meta.get("plane") or "")
@@ -735,7 +737,8 @@ def main() -> None:
 
     # Resolve images early (needed by slider and inference)
     resolved_images, _images_are_fallback = get_resolved_images(selected_case)
-    _n_images = len(resolved_images)
+    resolved_image_paths = [p for p, _meta in resolved_images]
+    _n_images = len(resolved_image_paths)
     with st.sidebar:
         st.markdown("---")
         max_images = st.slider(
@@ -752,7 +755,7 @@ def main() -> None:
     # This lets the LLM know what each attached image represents (modality,
     # plane, anatomical region, caption from the dataset).
     if resolved_images and use_images:
-        img_ctx = _build_image_context_text(selected_case, resolved_images[:max_images], _images_are_fallback)
+        img_ctx = _build_image_context_text(resolved_images[:max_images], _images_are_fallback)
         if img_ctx:
             composed_ehr = composed_ehr + "\n\n" + img_ctx
     effective_max_tokens = max_tokens
@@ -760,7 +763,7 @@ def main() -> None:
         effective_max_tokens = medgemma_token_budget(
             requested_tokens=max_tokens,
             ehr_text=composed_ehr,
-            image_count=min(max_images, len(resolved_images)),
+            image_count=min(max_images, len(resolved_image_paths)),
             use_images=use_images,
         )
 
@@ -808,7 +811,7 @@ def main() -> None:
                 model_id=model_id,
                 system_prompt=system_prompt,
                 ehr_text=composed_ehr,
-                image_paths=resolved_images,
+                image_paths=resolved_image_paths,
                 use_images=use_images,
                 max_images=max_images,
                 max_tokens=effective_max_tokens,
@@ -821,7 +824,7 @@ def main() -> None:
                 model_name=model_id,
                 system_prompt=system_prompt,
                 ehr_text=composed_ehr,
-                image_paths=resolved_images,
+                image_paths=resolved_image_paths,
                 use_images=use_images,
                 max_images=max_images,
                 max_tokens=effective_max_tokens,
@@ -895,8 +898,8 @@ def main() -> None:
                 f"{_n_images} image(s) linked to this case."
                 + (" Enable 'Preview images in viewer' in the sidebar to display them." if not show_linked_images else "")
             )
-        if show_linked_images and resolved_images:
-            shown = resolved_images[:6]
+        if show_linked_images and resolved_image_paths:
+            shown = resolved_image_paths[:6]
             preview_items: List[Any] = []
             captions: List[str] = []
             skipped = 0
