@@ -54,6 +54,12 @@ PMCpatient/PMC-Patients-sample-1000_qa_dev.jsonl
 *.tmp
 *.bak
 
+# Large TrialGPT data (1.1 GB) — download separately
+trial_matching_agent/data/trial_info.json
+
+# Synthetic DICOM patient volumes (9.4 GB)
+Synthetic/patient_dicoms/
+
 # MongoDB
 dump/
 

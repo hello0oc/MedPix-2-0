@@ -36,7 +36,9 @@ SYSTEM_INSTRUCTION = (
     "provide: (1) most likely diagnosis, (2) brief rationale in 2-4 lines. "
     "Return ONLY valid JSON with this schema and no markdown/code fences: "
     '{"diagnosis":"<single best diagnosis>","rationale":"<2-4 lines concise clinical reasoning>"}. '
-    "Do not include any other keys."
+    "Do not include any other keys. "
+    "CRITICAL: output exactly ONE JSON object and then STOP. "
+    "Do NOT generate any additional clinical cases, patient histories, examples, or any text after the closing brace."
 )
 
 
@@ -435,6 +437,9 @@ def _messages_to_generate_payload(
         prompt_parts.append(user_text)
 
     prompt = "\n\n".join(prompt_parts).strip()
+    # Stop sequences prevent the model from hallucinating additional clinical
+    # cases or patient records after it closes the first JSON object.
+    _stop_seqs = ["Clinical History:", "\nExample ", "<image>", "Examination Findings:"]
     payload: Dict[str, Any] = {
         "inputs": prompt,
         "parameters": {
@@ -442,6 +447,7 @@ def _messages_to_generate_payload(
             "temperature": temperature,
             "do_sample": False,
             "return_full_text": False,
+            "stop_sequences": _stop_seqs,
         },
     }
     if images_b64:
@@ -465,11 +471,15 @@ def endpoint_chat_completion(
     if not chat_url.endswith("/v1/chat/completions"):
         chat_url = f"{chat_url}/v1/chat/completions"
 
+    # Stop sequences prevent the model from hallucinating additional clinical
+    # cases or patient records after it closes the first JSON object.
+    _stop_seqs = ["Clinical History:", "\nExample ", "<image>", "Examination Findings:"]
     payload = {
         "model": model_id,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "stop": _stop_seqs,
     }
 
     def post_json(url: str, payload_obj: Dict[str, Any]) -> Any:

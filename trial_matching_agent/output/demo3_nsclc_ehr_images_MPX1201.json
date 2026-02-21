@@ -1,0 +1,171 @@
+{
+  "demo": "nsclc_ehr_plus_images",
+  "patient_id": "MPX1201",
+  "diagnosis": "Metastatic Adenocarcinoma of the Lung",
+  "ehr_length": 2216,
+  "images_used": 5,
+  "image_files": [
+    "MPX1201_synpic30961.png",
+    "MPX1201_synpic30962.png",
+    "MPX1201_synpic30963.png",
+    "MPX1201_synpic30964.png",
+    "MPX1201_synpic30967.png"
+  ],
+  "image_analysis": {
+    "modality": "CT",
+    "body_part": "Thorax, Abdomen, and Pelvis",
+    "findings": [
+      {
+        "finding": "Pulmonary Mass",
+        "location": "Right lower lobe, posterior aspect",
+        "description": "A large, irregularly marginated soft tissue mass is present in the posterior aspect of the right lower lobe, abutting the pleura."
+      },
+      {
+        "finding": "Lymphadenopathy",
+        "location": "Right hilum",
+        "description": "Enlarged lymph nodes are noted in the right hilum."
+      },
+      {
+        "finding": "Soft Tissue Mass",
+        "location": "Right thigh",
+        "description": "A large, heterogeneous soft tissue mass is seen involving the anterior and lateral musculature of the right thigh, with surrounding soft tissue edema."
+      },
+      {
+        "finding": "Liver Lesion",
+        "location": "Right hepatic lobe, posterior aspect (segment VII)",
+        "description": "A low-density lesion is present in the posterior aspect of the right lobe of the liver."
+      },
+      {
+        "finding": "Vertebral Body Abnormality",
+        "location": "Thoracic and lumbar spine",
+        "description": "Sclerotic changes are noted within the visualized vertebral bodies."
+      },
+      {
+        "finding": "Gastric Calcification",
+        "location": "Stomach",
+        "description": "Punctate calcifications are noted within the stomach."
+      }
+    ],
+    "raw_text": "{\n  \"modality\": \"CT\",\n  \"body_part\": \"Thorax, Abdomen, and Pelvis\",\n  \"findings\": [\n    {\n      \"finding\": \"Pulmonary Mass\",\n      \"location\": \"Right lower lobe, posterior aspect\",\n      \"description\": \"A large, irregularly marginated soft tissue mass is present in the posterior aspect of the right lower lobe, abutting the pleura.\"\n    },\n    {\n      \"finding\": \"Lymphadenopathy\",\n      \"location\": \"Right hilum\",\n      \"description\": \"Enlarged lymph nodes are noted in the right hilum.\"\n    },\n    {\n      \"finding\": \"Soft Tissue Mass\",\n      \"location\": \"Right thigh\",\n      \"description\": \"A large, heterogeneous soft tissue mass is seen involving the anterior and lateral musculature of the right thigh, with surrounding soft tissue edema.\"\n    },\n    {\n      \"finding\": \"Liver Lesion\",\n      \"location\": \"Right hepatic lobe, posterior aspect (segment VII)\",\n      \"description\": \"A low-density lesion is present in the posterior aspect of the right lobe of the liver.\"\n    },\n    {\n      \"finding\": \"Vertebral Body Abnormality\",\n      \"location\": \"Thoracic and lumbar spine\",\n      \"description\": \"Sclerotic changes are noted within the visualized vertebral bodies.\"\n    },\n    {\n      \"finding\": \"Gastric Calcification\",\n      \"location\": \"Stomach\",\n      \"description\": \"Punctate calcifications are noted within the stomach.\"\n    }\n  ],\n  \"summary\": \"The CT scan reveals a large soft tissue mass in the right lower lobe of the lung with associated right hilar lymphadenopathy. There is evidence of distant metastatic disease, including a large soft tissue mass in the right thigh and a hypodense lesion in the liver. Sclerotic changes in the spine are also noted. The findings are consistent with metastatic lung carcinoma.\"\n}",
+    "imaging_criteria_assessments": {}
+  },
+  "imaging_relevant_criteria": 24,
+  "ranked_trials": [
+    {
+      "nct_id": "NCT00049543",
+      "title": "Gefitinib in Treating Patients With Stage IB, II, or IIIA Non-small Cell Lung Cancer That Was Completely Removed by Surgery",
+      "matching_score": -0.6111111111327161,
+      "aggregation_score": 0.0,
+      "total_score": -0.6111111111327161,
+      "aggregation": {
+        "relevance_explanation": "The patient is diagnosed with adenocarcinoma of the lung, which is a type of non-small cell lung cancer (NSCLC) targeted by the trial. This establishes a baseline relevance. However, the trial is specifically designed for patients with early-stage (IB, II, or IIIA) disease who have undergone complete surgical resection. The patient has metastatic (Stage IV) disease and has not had the required surgery, making the trial's primary objective\u2014preventing recurrence after surgery\u2014irrelevant to the patient's clinical situation of treating active, advanced cancer.",
+        "relevance_score_R": 45.0,
+        "eligibility_explanation": "The patient is definitively ineligible for this trial. The primary reasons for ineligibility are the failure to meet two fundamental inclusion criteria: the patient has metastatic disease (equivalent to Stage IV), while the trial requires Stage IB, II, or IIIA (Inclusion Criterion 1), and the patient has not undergone complete surgical resection of the tumor, a core requirement for the study population (Inclusion Criterion 9). While the patient has the correct histology and does not meet any exclusion criteria, these two points of failure are non-negotiable and make enrollment impossible.",
+        "eligibility_score_E": -45.0
+      }
+    },
+    {
+      "nct_id": "NCT00188279",
+      "title": "Minimum Dose Computed Tomography of the Thorax for Follow-up in Patients With Resected Lung Carcinoma",
+      "matching_score": -1.0,
+      "aggregation_score": 0.0,
+      "total_score": -1.0,
+      "aggregation": {
+        "relevance_explanation": "The patient is diagnosed with adenocarcinoma of the lung, which aligns with the trial's target condition of lung carcinoma. This establishes a baseline relevance. However, the trial is specifically designed for a very particular clinical context: follow-up imaging for patients who have already undergone surgical resection of their lung cancer with curative intent. The patient's situation, having active metastatic disease and being treated with chemotherapy and radiation, is fundamentally different from the post-operative surveillance population the trial seeks to enroll. Therefore, the relevance is moderate.",
+        "relevance_score_R": 60.0,
+        "eligibility_explanation": "The patient is definitively ineligible for this trial. The primary inclusion criterion requires patients to have undergone a lung resection with the intent to cure. The patient's note clearly indicates metastatic disease, and the treatment plan involves radiation and chemotherapy, not curative surgery. The partial resection mentioned was of a femur metastasis, not the primary lung tumor. While the patient meets the age requirement (47 years old is not < 18), failing the core inclusion criterion makes them ineligible.",
+        "eligibility_score_E": -60.0
+      }
+    },
+    {
+      "nct_id": "NCT00005666",
+      "title": "Utility of Anatometabolic Imaging for Radiation Treatment Planning for Lung Cancer",
+      "matching_score": -1.0,
+      "aggregation_score": 0.0,
+      "total_score": -1.0,
+      "aggregation": {
+        "relevance_explanation": "The patient is highly relevant to the clinical trial in terms of diagnosis and treatment modality. The patient has adenocarcinoma of the lung, a type of Non-Small-Cell Lung Cancer (NSCLC), which is the target condition of the trial. Furthermore, the patient is planned for radiation therapy, and the trial's purpose is to study imaging techniques (CT and PET, both of which the patient has had) for radiation treatment planning. However, the relevance is significantly reduced because the trial specifically targets patients with locally advanced (Stage IIIA/IIIB) or early-stage (I/II) disease, whereas the patient has widely metastatic (Stage IV) disease. This mismatch in disease stage is a critical factor.",
+        "relevance_score_R": 65.0,
+        "eligibility_explanation": "The patient is definitively ineligible for this clinical trial. The eligibility predictions clearly show that the patient fails to meet the core inclusion criteria regarding disease stage. Inclusion criterion 0 requires 'locally advanced NSCLC' and inclusion criterion 1 requires 'Disease limited to the thorax... Stage IIIA and IIIB'. The patient's note confirms metastatic disease with masses in the femur, gluteal musculature, and mesentery, which corresponds to Stage IV disease. Therefore, the patient is explicitly excluded by the trial's scope.",
+        "eligibility_score_E": -65.0
+      }
+    },
+    {
+      "nct_id": "NCT01803542",
+      "title": "Stereotactic Radiotherapy (SBRT) of Lung Metastasis",
+      "matching_score": -1.5833333333680555,
+      "aggregation_score": 0.0,
+      "total_score": -1.5833333333680555,
+      "aggregation": {
+        "relevance_explanation": "",
+        "relevance_score_R": 0.0,
+        "eligibility_explanation": "",
+        "eligibility_score_E": 0.0
+      }
+    },
+    {
+      "nct_id": "NCT00852644",
+      "title": "Stereotactic Radiosurgery in Treating Patients With Stage I or Stage II Non-Small Cell Lung Cancer",
+      "matching_score": -1.625000000046875,
+      "aggregation_score": 0.0,
+      "total_score": -1.625000000046875,
+      "aggregation": {
+        "relevance_explanation": "The patient is diagnosed with adenocarcinoma of the lung, which is a type of non-small cell lung cancer (NSCLC), the target condition for the clinical trial. This establishes a direct relevance based on the disease type. However, the trial is specifically designed for patients with early-stage (Stage I or II) disease, whereas the patient presents with advanced, metastatic (Stage IV) disease. This fundamental mismatch in disease stage significantly reduces the overall relevance, as the treatment goals and methodologies for localized versus systemic cancer are vastly different.",
+        "relevance_score_R": 60.0,
+        "eligibility_explanation": "The patient is definitively ineligible for this trial due to multiple critical criteria mismatches. The primary inclusion criterion requires Stage I or II disease, but the patient has confirmed metastatic (Stage IV) disease, which is a hard exclusion. Additionally, the patient is excluded due to evidence of nodal metastasis (right hilar adenopathy), while the trial requires N0 status. The presence of endobronchial narrowing also likely leads to exclusion based on tumor location criteria. Although the patient has the correct cancer histology (NSCLC), the advanced stage and extent of the disease are in direct conflict with the trial's protocol.",
+        "eligibility_score_E": -60.0
+      }
+    }
+  ],
+  "feedback_requests": [],
+  "step_history": [
+    {
+      "step": 1,
+      "tool": "extract_patient_profile",
+      "input_summary": "text_len=2216",
+      "output_summary": "facts=11"
+    },
+    {
+      "step": 2,
+      "tool": "analyze_images",
+      "input_summary": "n_images=5",
+      "output_summary": "findings=6"
+    },
+    {
+      "step": 3,
+      "tool": "generate_search_keywords",
+      "input_summary": "",
+      "output_summary": "conditions=[]"
+    },
+    {
+      "step": 4,
+      "tool": "search_trials",
+      "input_summary": "",
+      "output_summary": "n_trials=5"
+    },
+    {
+      "step": 5,
+      "tool": "match_criteria",
+      "input_summary": "",
+      "output_summary": "matched 5 trials"
+    },
+    {
+      "step": 6,
+      "tool": "aggregate_and_score",
+      "input_summary": "",
+      "output_summary": "aggregated 5"
+    },
+    {
+      "step": 7,
+      "tool": "rank_and_build_results",
+      "input_summary": "",
+      "output_summary": "top=NCT00049543"
+    },
+    {
+      "step": 8,
+      "tool": "identify_missing_info",
+      "input_summary": "",
+      "output_summary": "feedback=0"
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+{
+  "demo": "trialgpt_patient",
+  "patient_id": "sigir-20141",
+  "n_candidate_trials": 9,
+  "ranked_trials": [
+    {
+      "nct_id": "NCT00952744",
+      "title": "Investigation of the Biomarker Copeptin in Patients With Acute Myocardial Infarction",
+      "matching_score": 0.99999999975,
+      "aggregation_score": 2.0,
+      "total_score": 2.99999999975,
+      "aggregation": {
+        "relevance_explanation": "The patient's presentation is highly relevant to the clinical trial. The patient is a 58-year-old female presenting with classic symptoms of Acute Coronary Syndrome (ACS), including exertional chest pain, radiation to the back, nausea, and diaphoresis. The trial's target condition is specifically ACS, making this patient's clinical profile an exact match for the study's population of interest.",
+        "relevance_score_R": 100.0,
+        "eligibility_explanation": "Based on the provided information and predictions, the patient is fully eligible for the trial. The patient meets all inclusion criteria: they are over 18 years old (58), present with symptoms consistent with ACS, and arrived at the Emergency Department within the required 6-hour window. Furthermore, the patient does not meet any exclusion criteria; the symptoms are highly suggestive of ACS and not clearly due to other causes, and the patient is considered able to provide consent.",
+        "eligibility_score_E": 100.0
+      }
+    },
+    {
+      "nct_id": "NCT00005127",
+      "title": "Muscatine Heart Study",
+      "matching_score": 0.9999999989999999,
+      "aggregation_score": 1.9,
+      "total_score": 2.899999999,
+      "aggregation": {
+        "relevance_explanation": "The patient's clinical profile is highly relevant to the clinical trial. The patient is a 58-year-old adult with a history of hypertension and is presenting with symptoms highly suggestive of coronary disease. The clinical trial explicitly targets Cardiovascular Diseases, Coronary Disease, and Hypertension in adults. The patient's presentation and risk factors align perfectly with the study's focus on understanding risk factors for these conditions.",
+        "relevance_score_R": 95.0,
+        "eligibility_explanation": "The patient is considered eligible for the trial. The only provided criterion is 'No eligibility criteria', and the patient is predicted as 'included'. In the absence of any specific inclusion requirements to fail or any listed exclusion criteria, the patient is deemed fully eligible for participation based on the information provided.",
+        "eligibility_score_E": 95.0
+      }
+    },
+    {
+      "nct_id": "NCT02608255",
+      "title": "A Prospective Pilot Study to Evaluate a New Marker of Ischemia in Chest Pain Triage",
+      "matching_score": -0.2500000001875,
+      "aggregation_score": 0.0,
+      "total_score": -0.2500000001875,
+      "aggregation": {
+        "relevance_explanation": "The patient is a 58-year-old woman presenting with new-onset chest pain concerning for an unstable cardiac etiology, which directly aligns with the clinical trial's target condition of Acute Coronary Syndrome and its population of 'chest pain patients'. Her age is also within the trial's requirement of being over 18. Therefore, her clinical profile is highly relevant to this study investigating a new marker for chest pain triage.",
+        "relevance_score_R": 95.0,
+        "eligibility_explanation": "The patient meets several key criteria: she is an adult female, is not on any medications (including anticoagulants), and is able to provide informed consent. She also does not meet any of the specified exclusion criteria. However, she is definitively ineligible because she fails to meet a critical inclusion criterion regarding symptom duration. The trial requires symptoms to be 'not older than 3 hours,' whereas the patient has a 'two-day history' of symptoms. This single, clear failure makes her ineligible for enrollment.",
+        "eligibility_score_E": -95.0
+      }
+    },
+    {
+      "nct_id": "NCT00373828",
+      "title": "Non-cardiac Chest Pain Evaluation and Treatment Study (CARPA) - Part 1: Diagnosis.",
+      "matching_score": -0.500000000125,
+      "aggregation_score": 0.05,
+      "total_score": -0.450000000125,
+      "aggregation": {
+        "relevance_explanation": "The patient is highly relevant to this clinical trial. The trial aims to study patients presenting with acute chest pain who are admitted for evaluation of acute coronary syndrome, in order to identify those with non-cardiac (specifically musculoskeletal) causes. The patient, a 58-year-old woman with a new onset of acute chest pain concerning for an 'unstable cardiac etiology', fits this initial screening population perfectly. Her symptoms and the clinical context align directly with the trial's target group for initial evaluation.",
+        "relevance_score_R": 95.0,
+        "eligibility_explanation": "Despite the high relevance, the patient is currently ineligible. The trial is for patients who are ultimately diagnosed with non-cardiac chest pain. The patient's assessment is 'concerning for an unstable cardiac etiology,' which is a form of Acute Coronary Syndrome (ACS). ACS is a specific exclusion criterion (exclusion criterion 0). Furthermore, this diagnosis serves as an 'Other disease, diagnosed during this admission, which is likely to have caused the acute episode of chest pain' (exclusion criterion 3). Therefore, based on the current assessment, the patient is definitively excluded by at least two major criteria.",
+        "eligibility_score_E": -90.0
+      }
+    },
+    {
+      "nct_id": "NCT01660594",
+      "title": "CT Calcium Scoring in Suspected Stable Angina",
+      "matching_score": -0.6666666667777779,
+      "aggregation_score": 0.05,
+      "total_score": -0.6166666667777778,
+      "aggregation": {
+        "relevance_explanation": "The patient's presentation with chest pain and risk factors for coronary artery disease (hypertension, obesity) has some thematic overlap with the trial's focus on coronary disease. However, the relevance is significantly diminished by a critical mismatch in the patient's clinical status. The trial is specifically for patients with 'stable chest pain', whereas this patient presents with 'new onset' chest pain concerning for an 'unstable cardiac etiology'. Furthermore, the trial is a retrospective review of patients who have already undergone a specific imaging test (CT Calcium Scoring), which this patient has not had. Therefore, the patient's acute presentation and lack of the required prior procedure make her profile only moderately relevant to this specific study.",
+        "relevance_score_R": 40.0,
+        "eligibility_explanation": "The patient is ineligible for this clinical trial. The primary reasons are the failure to meet two fundamental inclusion criteria. First, the trial requires patients with 'non-acute chest pain', but the patient's condition is described as a 'new onset' and 'unstable cardiac etiology'. Second, the trial is a retrospective study requiring that patients have already 'underwent CT calcium scoring', a procedure not mentioned in the patient's record. Although the patient's risk factor information is available (meeting one inclusion criterion) and she does not have a history of previous coronary disease (correctly not meeting an exclusion criterion), the failure on the core criteria of clinical stability and the required prior procedure makes her definitively ineligible.",
+        "eligibility_score_E": -35.0
+      }
+    }
+  ],
+  "ground_truth": {
+    "NCT00373828": 2,
+    "NCT00952744": 2,
+    "NCT00005127": 2,
+    "NCT01660594": 1,
+    "NCT02608255": 1,
+    "NCT00162344": 1,
+    "NCT01724996": 0,
+    "NCT00166231": 0,
+    "NCT00462241": 0
+  },
+  "metrics": {
+    "ndcg_at_5": 0.9808,
+    "precision_at_5": 1.0,
+    "accuracy": 0.4,
+    "macro_f1": 0.2667,
+    "cohens_kappa": 0.2105
+  },
+  "feedback_requests": [],
+  "step_history": [
+    {
+      "step": 1,
+      "tool": "extract_patient_profile",
+      "input_summary": "text_len=633",
+      "output_summary": "facts=5"
+    },
+    {
+      "step": 2,
+      "tool": "generate_search_keywords",
+      "input_summary": "",
+      "output_summary": "conditions=[]"
+    },
+    {
+      "step": 3,
+      "tool": "search_trials",
+      "input_summary": "",
+      "output_summary": "n_trials=5"
+    },
+    {
+      "step": 4,
+      "tool": "match_criteria",
+      "input_summary": "",
+      "output_summary": "matched 5 trials"
+    },
+    {
+      "step": 5,
+      "tool": "aggregate_and_score",
+      "input_summary": "",
+      "output_summary": "aggregated 5"
+    },
+    {
+      "step": 6,
+      "tool": "rank_and_build_results",
+      "input_summary": "",
+      "output_summary": "top=NCT00952744"
+    },
+    {
+      "step": 7,
+      "tool": "identify_missing_info",
+      "input_summary": "",
+      "output_summary": "feedback=0"
+    }
+  ]
+}

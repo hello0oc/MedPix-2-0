@@ -1,0 +1,119 @@
+{
+  "demo": "nsclc_ehr_only",
+  "patient_id": "MPX1201",
+  "diagnosis": "Metastatic Adenocarcinoma of the Lung",
+  "ehr_length": 2216,
+  "images_used": 0,
+  "ranked_trials": [
+    {
+      "nct_id": "NCT00005666",
+      "title": "Utility of Anatometabolic Imaging for Radiation Treatment Planning for Lung Cancer",
+      "matching_score": -1.0,
+      "aggregation_score": 0.05,
+      "total_score": -0.95,
+      "aggregation": {
+        "relevance_explanation": "The patient is highly relevant to this clinical trial. The trial's target condition is Non-Small-Cell Lung Cancer (NSCLC), and the patient is diagnosed with adenocarcinoma of the lung, a subtype of NSCLC. Furthermore, the trial investigates the use of PET and CT scans for radiation treatment planning, and the patient has undergone both imaging modalities and is planned for radiation therapy. The core topic of the study directly aligns with the patient's diagnosis and planned treatment.",
+        "relevance_score_R": 85.0,
+        "eligibility_explanation": "Despite the high relevance, the patient is ineligible for this trial. The study's inclusion criteria strictly limit enrollment to patients with 'locally advanced' NSCLC (Stage IIIA and IIIB) or medically inoperable Stage I or II disease. The patient's notes clearly indicate metastatic disease with masses in the femur, gluteal musculature, and mesentery, which corresponds to Stage IV cancer. Therefore, the patient is definitively excluded by inclusion criteria 0 and 1, which specify the required disease stage.",
+        "eligibility_score_E": -80.0
+      }
+    },
+    {
+      "nct_id": "NCT00049543",
+      "title": "Gefitinib in Treating Patients With Stage IB, II, or IIIA Non-small Cell Lung Cancer That Was Completely Removed by Surgery",
+      "matching_score": -1.0,
+      "aggregation_score": 0.0,
+      "total_score": -1.0,
+      "aggregation": {
+        "relevance_explanation": "The patient's diagnosis of adenocarcinoma of the lung aligns with the trial's target conditions. However, the trial is fundamentally designed for a different clinical context: it focuses on patients with early-stage (IB-IIIA) NSCLC who have undergone complete surgical resection, with the goal of preventing recurrence. The patient has advanced, metastatic (Stage IV) disease that has not been surgically resected for curative intent. This significant mismatch in disease stage and treatment setting makes the trial's purpose largely irrelevant to the patient's current clinical situation.",
+        "relevance_score_R": 30.0,
+        "eligibility_explanation": "The patient is ineligible for this trial. The primary reasons are the failure to meet the core inclusion criteria, which require a diagnosis of Stage IB, II, or IIIA NSCLC and complete surgical resection of the tumor. The patient has metastatic disease, which is considered Stage IV. Furthermore, the patient is explicitly excluded by criterion 2, which prohibits 'more than one discrete area of apparent primary cancer,' a description that fits the patient's metastatic condition with masses in the lung, femur, and other soft tissues.",
+        "eligibility_score_E": -30.0
+      }
+    },
+    {
+      "nct_id": "NCT00188279",
+      "title": "Minimum Dose Computed Tomography of the Thorax for Follow-up in Patients With Resected Lung Carcinoma",
+      "matching_score": -1.0,
+      "aggregation_score": 0.0,
+      "total_score": -1.0,
+      "aggregation": {
+        "relevance_explanation": "The patient's diagnosis of metastatic adenocarcinoma of the right lung establishes relevance, as this is a type of non-small cell lung cancer, the target condition of the trial. However, the trial's focus is very specific: follow-up imaging for patients who have undergone surgical resection with curative intent. The patient's disease is metastatic and the treatment plan involves radiation and chemotherapy, not curative surgery. This significant mismatch in clinical stage and treatment context limits the overall relevance.",
+        "relevance_score_R": 50.0,
+        "eligibility_explanation": "The patient is ineligible for this trial. The core inclusion criterion requires patients to have undergone or be undergoing lung cancer resection with an intent to cure. The patient has metastatic disease, for which curative resection is not the standard of care, and the documented plan is for radiation and chemotherapy. Therefore, the patient fails to meet the fundamental requirement for study entry, making them ineligible despite meeting the age criterion.",
+        "eligibility_score_E": -50.0
+      }
+    },
+    {
+      "nct_id": "NCT00852644",
+      "title": "Stereotactic Radiosurgery in Treating Patients With Stage I or Stage II Non-Small Cell Lung Cancer",
+      "matching_score": -1.5000000000833333,
+      "aggregation_score": 0.0,
+      "total_score": -1.5000000000833333,
+      "aggregation": {
+        "relevance_explanation": "The patient's diagnosis of adenocarcinoma, a type of non-small cell lung cancer (NSCLC), aligns with the trial's target condition. However, the trial is specifically designed for early-stage (I or II) localized disease. The patient has advanced, metastatic (Stage IV) disease with spread to the femur, soft tissue, and lymph nodes. This fundamental difference in disease stage significantly lowers the relevance, as the studied intervention (stereotactic radiosurgery) is intended for localized tumors.",
+        "relevance_score_R": 60.0,
+        "eligibility_explanation": "The patient is definitively ineligible for this clinical trial. Although the patient has the correct cancer type (NSCLC), they fail to meet the most critical inclusion criterion, which requires Stage I or II disease. The patient's metastatic disease is a hard exclusion. Furthermore, the patient is explicitly excluded by at least two other criteria: the presence of hilar adenopathy indicates nodal metastasis (violating exclusion criterion 3), and the finding of endobronchial narrowing indicates tumor involvement of the bronchial tree (violating exclusion criterion 4).",
+        "eligibility_score_E": -60.0
+      }
+    },
+    {
+      "nct_id": "NCT01803542",
+      "title": "Stereotactic Radiotherapy (SBRT) of Lung Metastasis",
+      "matching_score": -1.5384615384970415,
+      "aggregation_score": 0.0,
+      "total_score": -1.5384615384970415,
+      "aggregation": {
+        "relevance_explanation": "",
+        "relevance_score_R": 0.0,
+        "eligibility_explanation": "",
+        "eligibility_score_E": 0.0
+      }
+    }
+  ],
+  "feedback_requests": [],
+  "step_history": [
+    {
+      "step": 1,
+      "tool": "extract_patient_profile",
+      "input_summary": "text_len=2216",
+      "output_summary": "facts=11"
+    },
+    {
+      "step": 2,
+      "tool": "generate_search_keywords",
+      "input_summary": "",
+      "output_summary": "conditions=[]"
+    },
+    {
+      "step": 3,
+      "tool": "search_trials",
+      "input_summary": "",
+      "output_summary": "n_trials=5"
+    },
+    {
+      "step": 4,
+      "tool": "match_criteria",
+      "input_summary": "",
+      "output_summary": "matched 5 trials"
+    },
+    {
+      "step": 5,
+      "tool": "aggregate_and_score",
+      "input_summary": "",
+      "output_summary": "aggregated 5"
+    },
+    {
+      "step": 6,
+      "tool": "rank_and_build_results",
+      "input_summary": "",
+      "output_summary": "top=NCT00005666"
+    },
+    {
+      "step": 7,
+      "tool": "identify_missing_info",
+      "input_summary": "",
+      "output_summary": "feedback=0"
+    }
+  ]
+}

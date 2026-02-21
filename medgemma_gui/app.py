@@ -33,6 +33,7 @@ from medgemma_benchmark.run_medgemma_benchmark import (
 DATASET_PATH = REPO_ROOT / "patient-ehr-image-dataset/full_dataset.jsonl"
 PMC_DATASET_PATH = REPO_ROOT / "PMCpatient/PMC-Patients-sample-1000.csv"
 SYNTHETIC_DATASET_PATH = REPO_ROOT / "Synthetic/synthetic_ehr_image_dataset.jsonl"
+NSCLC_DATASET_PATH = REPO_ROOT / "nsclc-dataset/nsclc_dataset.jsonl"
 WORKSPACE_ROOT = REPO_ROOT
 PRESET_ENDPOINT_URL = "https://pcmy7bkqtqesrrzd.us-east-1.aws.endpoints.huggingface.cloud"
 PRESET_MODEL_ID = "google/medgemma-1-5-4b-it-hae"
@@ -57,29 +58,84 @@ MEDGEMMA_EXPLAIN_PROMPT = (
     "You are MedGemma, a medical vision-language model trained on clinical data. "
     "Your task: explain this clinical case to a patient or non-medical reader using simple, empathetic language. "
     "Base your explanation on ALL of the following sources of evidence, weighting them together:\n"
-    "  1. The patient's EHR text (history, exam findings, imaging reports) provided in the user message.\n"
-    "  2. Any attached medical images — describe what you observe without jargon.\n"
+    "  1. The patient's EHR text (history and exam findings only — imaging/radiology reports are intentionally "
+    "     withheld) provided in the user message.\n"
+    "  2. Any attached medical images — you MUST independently examine and interpret these images yourself. "
+    "     Do NOT rely on any pre-written radiology or imaging report; describe only what you directly observe.\n"
     "  3. If a prior AI diagnostic result is present at the end of the system prompt, you MUST reference it "
     "     explicitly: tell the patient what the diagnosis means in plain language and why the clinical findings "
     "     support it. Do not contradict the diagnostic result.\n\n"
     "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
     "  plain_summary    : 2-3 sentence plain-language overview of what is happening, grounded in the EHR facts\n"
-    "  image_findings   : what the medical images show, described without jargon (empty string if no images)\n"
+    "  image_findings   : what YOU directly observe in the medical images, described without jargon "
+    "(empty string if no images were provided)\n"
     "  image_conclusion : what those image findings mean for the patient (empty string if no images)\n"
-    "  next_steps       : what typically happens next (tests, referrals, treatment)"
+    "  next_steps       : what typically happens next (tests, referrals, treatment)\n\n"
+    "CRITICAL: output exactly ONE JSON object and then STOP. "
+    "Do NOT generate any additional clinical cases, patient histories, example reports, or any text after the closing brace."
 )
 
 MEDGEMMA_DIAGNOSIS_PROMPT = (
     "You are MedGemma, a specialist clinical diagnostic assistant. "
-    "Analyse the provided patient history, examination findings, imaging reports, and any attached images. "
+    "Analyse the provided patient history, examination findings, and any attached images. "
+    "IMPORTANT: The EHR text provided does NOT include pre-written imaging or radiology reports — "
+    "you MUST independently examine and interpret any attached images yourself. "
+    "Do not assume or invent imaging findings that are not visible in the provided images.\n\n"
     "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
-    "examination signs, and imaging characteristics to reach a single best diagnosis. "
+    "examination signs, and your own direct interpretation of imaging characteristics to reach a single best diagnosis. "
     "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
     "  diagnosis         : single most likely diagnosis (concise clinical term)\n"
     "  confidence        : one of 'High', 'Moderate', or 'Low'\n"
-    "  rationale         : 3-5 sentence evidence-based justification citing specific findings from the case\n"
-    "  key_findings      : comma-separated list of the top 3-5 findings that support this diagnosis\n"
-    "  differential      : 2-3 alternative diagnoses to consider, as a comma-separated list"
+    "  rationale         : 3-5 sentence evidence-based justification citing specific findings from the case "
+    "and your own image interpretation\n"
+    "  key_findings      : comma-separated list of the top 3-5 findings that support this diagnosis, "
+    "including image observations\n"
+    "  differential      : 2-3 alternative diagnoses to consider, as a comma-separated list\n\n"
+    "CRITICAL: output exactly ONE JSON object and then STOP. "
+    "Do NOT generate any additional clinical cases, patient histories, example reports, or any text after the closing brace."
+)
+
+# MedGemma text-only variants — used when 'Include linked images' is unchecked.
+#
+# MedGemma 1.5 4B is a small fine-tuned medical VLM.  It was trained on paired
+# image-text data, so any mention of "attached images" or "examine the scan" in
+# the prompt body primes it to produce imaging observations even when no images
+# are actually present.  Unlike Gemini 2.5 Pro (a large reasoning model), it
+# cannot reliably override that priming via a meta-instruction prepended at
+# inference time.  The correct solution is to give it a prompt that contains no
+# image-related language whatsoever, so the conflicting activation never arises.
+MEDGEMMA_EXPLAIN_PROMPT_TEXT_ONLY = (
+    "You are MedGemma, a medical AI assistant trained on clinical data. "
+    "Your task: explain this clinical case to a patient or non-medical reader using simple, empathetic language. "
+    "Base your explanation solely on the patient's EHR text (history and examination findings) "
+    "provided in the user message. No medical images are available for this request.\n"
+    "If a prior AI diagnostic result is present at the end of the system prompt, you MUST reference it "
+    "explicitly: tell the patient what the diagnosis means in plain language and why the clinical findings "
+    "support it. Do not contradict the diagnostic result.\n\n"
+    "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
+    "  plain_summary    : 2-3 sentence plain-language overview of what is happening, grounded in the EHR facts\n"
+    '  image_findings   : "" (no images provided — this field must be an empty string)\n'
+    '  image_conclusion : "" (no images provided — this field must be an empty string)\n'
+    "  next_steps       : what typically happens next (tests, referrals, treatment)\n\n"
+    "CRITICAL: output exactly ONE JSON object and then STOP. "
+    "Do NOT generate any additional clinical cases, patient histories, example reports, or any text after the closing brace."
+)
+
+MEDGEMMA_DIAGNOSIS_PROMPT_TEXT_ONLY = (
+    "You are MedGemma, a specialist clinical diagnostic assistant. "
+    "No medical images are available for this request — base your analysis entirely on the "
+    "patient history and examination findings provided in the EHR text.\n\n"
+    "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
+    "and examination signs to reach a single best diagnosis. "
+    "Return ONLY valid JSON — no markdown, no prose outside the JSON — with exactly these keys:\n"
+    "  diagnosis         : single most likely diagnosis (concise clinical term)\n"
+    "  confidence        : one of 'High', 'Moderate', or 'Low'\n"
+    "  rationale         : 3-5 sentence evidence-based justification citing specific findings "
+    "from the history and examination only\n"
+    "  key_findings      : comma-separated list of the top 3-5 history/exam findings that support this diagnosis\n"
+    "  differential      : 2-3 alternative diagnoses to consider, as a comma-separated list\n\n"
+    "CRITICAL: output exactly ONE JSON object and then STOP. "
+    "Do NOT generate any additional clinical cases, patient histories, example reports, or any text after the closing brace."
 )
 
 # Gemini 2.5 Pro: thinking model — be crystal-clear about the desired JSON schema
@@ -88,48 +144,131 @@ GEMINI_EXPLAIN_PROMPT = (
     "You are a medical explainer for patients and non-medical readers. "
     "Use plain, friendly, empathetic language. Avoid jargon.\n\n"
     "Base your explanation on ALL of the following, weighting them together:\n"
-    "  1. The patient's EHR text (history, exam findings, imaging reports) in the user message.\n"
-    "  2. Any attached medical images — describe what you see visually.\n"
+    "  1. The patient's EHR text (history and exam findings only — imaging/radiology reports are intentionally "
+    "     withheld) in the user message.\n"
+    "  2. Any attached medical images — you MUST independently examine and interpret these images yourself. "
+    "     Do NOT rely on any pre-written radiology or imaging report; describe only what you directly observe "
+    "     in the images.\n"
     "  3. If a prior AI diagnostic result is appended to this system prompt, you MUST reference it "
     "     explicitly: explain to the patient what the diagnosis means in plain language and why the "
     "     available clinical facts support it. Do not contradict the diagnostic result.\n\n"
     "Return ONLY a single JSON object (no markdown, no code fences, no extra text) "
     "with exactly these four string keys:\n"
     '  "plain_summary"    – 2-3 sentence overview grounded in the EHR facts and (if present) the diagnostic result\n'
-    '  "image_findings"   – what the images show, described without jargon (empty string "" if none)\n'
+    '  "image_findings"   – what YOU directly observe in the images, described without jargon '
+    '(empty string "" if no images were provided)\n'
     '  "image_conclusion" – what those findings mean for the patient (empty string "" if none)\n'
     '  "next_steps"       – what typically happens next (tests, referrals, treatment)\n'
 )
 
 GEMINI_DIAGNOSIS_PROMPT = (
     "You are a specialist clinical diagnostic assistant. "
-    "Analyse all provided clinical history, examination findings, imaging reports, "
+    "Analyse all provided clinical history, examination findings, "
     "and any attached images.\n\n"
+    "IMPORTANT: The EHR text provided does NOT include pre-written imaging or radiology reports — "
+    "you MUST independently examine and interpret any attached images yourself. "
+    "Do not assume or invent imaging findings that are not visible in the provided images.\n\n"
     "Apply systematic clinical reasoning: consider the presenting complaint, risk factors, "
-    "examination signs, and imaging characteristics.\n\n"
+    "examination signs, and your own direct interpretation of imaging characteristics.\n\n"
     "Return ONLY a single JSON object (no markdown, no code fences, no extra text) "
     "with exactly these five string keys:\n"
     '  "diagnosis"    – single most likely diagnosis (concise clinical term)\n'
     '  "confidence"   – exactly one of: "High", "Moderate", "Low"\n'
-    '  "rationale"    – 3-5 sentence evidence-based justification citing specific case findings\n'
-    '  "key_findings" – top 3-5 supporting findings, comma-separated\n'
+    '  "rationale"    – 3-5 sentence evidence-based justification citing specific case findings '
+    'and your own image interpretation\n'
+    '  "key_findings" – top 3-5 supporting findings including image observations, comma-separated\n'
     '  "differential" – 2-3 alternative diagnoses to consider, comma-separated\n'
+)
+
+# ── Clinical Trial Profile prompts ────────────────────────────────────────
+#
+# These prompts produce a structured patient profile intended for downstream
+# clinical trial eligibility matching.  Two variants are provided:
+#   TRIAL_PROFILE_PROMPT          — used when medical images are supplied
+#   TRIAL_PROFILE_PROMPT_TEXT_ONLY — used when no images are available
+#
+# Both variants share the same output schema.  The key difference is the
+# sourcing rule for the "imaging_findings" key_fact (see inline comments).
+#
+# NO-HALLUCINATION RULE (enforced in both variants and by post-processing):
+#   Every key_fact "value" MUST be null when no supporting evidence exists in
+#   the provided sources.  Filler strings such as "unknown", "N/A", or "" are
+#   not acceptable — they will be coerced to null by the post-processor.
+_TRIAL_PROFILE_SCHEMA = (
+    'Return ONLY a single valid JSON object — no markdown, no code fences, no prose outside the object.\n'
+    'The object must have exactly these four top-level keys:\n\n'
+    '  "topic_id"    : string — use the value injected after "Use topic_id:" in this prompt\n'
+    '  "profile_text": string — a structured free-text summary using exactly these six Markdown '
+    'headings in order: "## Clinical History", "## Physical Exam", "## Imaging Findings", '
+    '"## Assessment & Plan", "## Demographics", "## Missing Info". '
+    'Under each heading write a concise paragraph drawn only from the provided input. '
+    'Under "## Missing Info" list any fields that could not be populated from the input.\n'
+    '  "key_facts"   : array of objects, each with exactly these five keys:\n'
+    '      "field"        : string — field name\n'
+    '      "value"        : string | object | array | null — extracted value; MUST be null if not evidenced\n'
+    '      "evidence_span": string | null — exact substring from the input that supports the value, or null\n'
+    '      "required"     : boolean\n'
+    '      "notes"        : string | null — metadata (e.g. imaging_source)\n'
+    '    Required key_fact fields (include all of these, plus any additional ones you can extract):\n'
+    '      "primary_diagnosis" (required: true)\n'
+    '      "demographics"      (required: true) — value should be {"age": "...", "sex": "..."}\n'
+    '      "imaging_findings"  (required: true) — see sourcing rule below\n'
+    '      "key_findings"      (required: true) — array of strings\n'
+    '      "missing_info"      (required: false) — array of field names that lack evidence\n'
+    '  "ambiguities" : array of strings — anything in the input that is contradictory or unclear\n\n'
+    'STRICT NO-HALLUCINATION RULE: For every key_fact field, if you cannot find supporting evidence '
+    'in the provided sources, you MUST set "value" to null. Do NOT infer, estimate, or fabricate values. '
+    'Do NOT use placeholder strings such as "unknown", "N/A", "not provided", or empty string "". '
+    'Add the field name to the "missing_info" key_fact value array whenever a required field is null.\n\n'
+    'CRITICAL: output exactly ONE JSON object and then STOP. '
+    'Do NOT generate any additional text, cases, or commentary after the closing brace.'
+)
+
+TRIAL_PROFILE_PROMPT = (
+    "You are a clinical data specialist preparing a structured patient profile for clinical trial eligibility matching. "
+    "You have been provided with the patient's EHR text (clinical history and examination findings) "
+    "and one or more medical images.\n\n"
+    "IMAGING FINDINGS SOURCING RULE (images provided):\n"
+    "  - You MUST derive the 'imaging_findings' key_fact primarily from your DIRECT ANALYSIS of the "
+    "supplied medical images. Examine the images yourself; do not rely on any pre-written radiology "
+    "report or imaging description in the EHR text.\n"
+    "  - Only supplement with EHR-sourced language where the images are genuinely ambiguous.\n"
+    "  - Set the 'notes' field of the imaging_findings key_fact to exactly: "
+    '"imaging_source: direct_image_analysis"\n'
+    "  - If the images are present but uninterpretable, fall back to EHR text and set notes to: "
+    '"imaging_source: ehr_extracted"\n\n'
+    + _TRIAL_PROFILE_SCHEMA
+)
+
+TRIAL_PROFILE_PROMPT_TEXT_ONLY = (
+    "You are a clinical data specialist preparing a structured patient profile for clinical trial eligibility matching. "
+    "You have been provided with the patient's EHR text only (clinical history and examination findings). "
+    "No medical images are available for this request.\n\n"
+    "IMAGING FINDINGS SOURCING RULE (no images provided):\n"
+    "  - You MUST extract the 'imaging_findings' key_fact solely from imaging-related language "
+    "present in the EHR text — for example, CT/MRI/X-ray result descriptions, radiology report "
+    "excerpts, or mentions of scan findings.\n"
+    "  - Set the 'notes' field of the imaging_findings key_fact to exactly: "
+    '"imaging_source: ehr_extracted"\n'
+    "  - If no imaging information can be found anywhere in the EHR text, set 'value' to null "
+    'and add "imaging_findings" to the missing_info key_fact value array.\n'
+    "  - Do NOT infer, fabricate, or hallucinate any imaging findings based on the diagnosis or "
+    "clinical context alone.\n\n"
+    + _TRIAL_PROFILE_SCHEMA
 )
 
 
 def history_richness_score(case: Dict[str, Any]) -> int:
-    """Score a case by the total information richness of its clinical text fields.
+    """Score a case by the length of the patient history text only.
 
-    Weights: history × 3 (primary), findings × 2, exam × 1, discussion × 1.
+    Only the 'history' field is used for ranking; image findings, exam notes,
+    and discussion are intentionally excluded.
     Skips N/A and placeholder values.
     """
-    def _len(field: str) -> int:
-        v = sanitize_text(case.get(field, "")).strip()
-        if not v or v.lower() in {"n/a", "none", "na", "-"}:
-            return 0
-        return len(v)
-
-    return _len("history") * 3 + _len("findings") * 2 + _len("exam") + _len("discussion")
+    v = sanitize_text(case.get("history", "")).strip()
+    if not v or v.lower() in {"n/a", "none", "na", "-"}:
+        return 0
+    return len(v)
 
 
 def parse_json_object(text: str) -> Dict[str, Any]:
@@ -206,6 +345,123 @@ def build_grounded_explain_prompt(base_prompt: str, diagnosis_json: Dict[str, An
         "Explain WHY the findings led to this diagnosis without using technical jargon."
     )
     return base_prompt + "\n".join(parts)
+
+
+def build_trial_profile_prompt(base_prompt: str, uid: str) -> str:
+    """Inject the patient topic_id into a trial profile system prompt.
+
+    Appends a small context block at the end of the prompt so the model
+    echoes the correct topic_id in its JSON output.  Post-processing in
+    validate_and_coerce_trial_profile hard-forces the value regardless, but
+    having it in the prompt reduces token correction overhead.
+    """
+    return base_prompt + f"\n\nUse topic_id: {uid.lower()}"
+
+
+# Filler strings that models commonly emit instead of null when a value is absent.
+_NULL_FILLERS = frozenset({
+    "", "unknown", "n/a", "na", "not provided", "not available",
+    "none", "null", "unspecified", "not stated", "not documented",
+})
+
+
+def validate_and_coerce_trial_profile(
+    result: Dict[str, Any],
+    uid: str,
+    used_images: bool,
+) -> Dict[str, Any]:
+    """Post-process a raw trial profile dict returned by the LLM.
+
+    Guarantees:
+    1. topic_id is always uid.lower() regardless of model output.
+    2. Filler strings ("unknown", "N/A", "", etc.) in key_fact values are
+       replaced with null so downstream consumers can rely on null meaning
+       "genuinely absent".
+    3. The imaging_findings key_fact always exists and carries the correct
+       imaging_source annotation in its notes field.
+    4. Every null required key_fact field is represented in missing_info.
+    """
+    # ── 1. Force topic_id ───────────────────────────────────────────────────
+    result["topic_id"] = uid.lower()
+
+    # ── 2. Ensure top-level lists exist ────────────────────────────────────
+    if not isinstance(result.get("key_facts"), list):
+        result["key_facts"] = []
+    if not isinstance(result.get("ambiguities"), list):
+        result["ambiguities"] = []
+    if not isinstance(result.get("profile_text"), str):
+        result["profile_text"] = ""
+
+    key_facts: List[Dict[str, Any]] = result["key_facts"]
+
+    # ── 3. Null-coercion pass ────────────────────────────────────────────────
+    # Collect/create missing_info fact so we can append to it.
+    missing_info_fact: Dict[str, Any] | None = next(
+        (kf for kf in key_facts if kf.get("field") == "missing_info"), None
+    )
+    if missing_info_fact is None:
+        missing_info_fact = {
+            "field": "missing_info",
+            "value": [],
+            "evidence_span": None,
+            "required": False,
+            "notes": None,
+        }
+        key_facts.append(missing_info_fact)
+    if not isinstance(missing_info_fact.get("value"), list):
+        missing_info_fact["value"] = (
+            [] if not missing_info_fact.get("value")
+            else [str(missing_info_fact["value"])]
+        )
+
+    for kf in key_facts:
+        if kf.get("field") == "missing_info":
+            continue  # handled separately
+        val = kf.get("value")
+        # Coerce filler scalars to null
+        if isinstance(val, str) and val.strip().lower() in _NULL_FILLERS:
+            kf["value"] = None
+            val = None
+        # Coerce filler list items; treat an all-filler list as null
+        if isinstance(val, list):
+            cleaned = [
+                item for item in val
+                if not (isinstance(item, str) and item.strip().lower() in _NULL_FILLERS)
+            ]
+            kf["value"] = cleaned if cleaned else None
+            val = kf["value"]
+        # Register null required fields in missing_info
+        if kf.get("required") and val is None:
+            field_name = kf.get("field", "")
+            if field_name and field_name not in missing_info_fact["value"]:
+                missing_info_fact["value"].append(field_name)
+
+    # ── 4. Guarantee imaging_findings key_fact ──────────────────────────────
+    imaging_source = "direct_image_analysis" if used_images else "ehr_extracted"
+    imaging_fact: Dict[str, Any] | None = next(
+        (kf for kf in key_facts if kf.get("field") == "imaging_findings"), None
+    )
+    if imaging_fact is None:
+        imaging_fact = {
+            "field": "imaging_findings",
+            "value": None,
+            "evidence_span": None,
+            "required": True,
+            "notes": f"imaging_source: {imaging_source}",
+        }
+        key_facts.insert(0, imaging_fact)
+        if "imaging_findings" not in missing_info_fact["value"]:
+            missing_info_fact["value"].append("imaging_findings")
+    else:
+        # Ensure notes always carry the imaging_source annotation
+        existing_notes = imaging_fact.get("notes") or ""
+        if "imaging_source" not in existing_notes:
+            imaging_fact["notes"] = (
+                f"imaging_source: {imaging_source}"
+                + (f"; {existing_notes}" if existing_notes else "")
+            )
+
+    return result
 
 
 def _is_oom_error(exc: Exception) -> bool:
@@ -361,7 +617,9 @@ def call_medgemma(
     timeout: int,
     retries: int,
 ) -> str:
-    effective_images = max_images
+    # When images are disabled, force the effective count to 0 so the OOM
+    # retry logic doesn't try to reduce an image budget that was never used.
+    effective_images = max_images if use_images else 0
     effective_tokens = max_tokens
     effective_ehr = ehr_text
 
@@ -575,9 +833,14 @@ def main() -> None:
 
         dataset_choice = st.radio(
             "Dataset Source",
-            options=["MedPix JSONL", "PMC-Patients CSV", "Synthea Coherent JSONL"],
+            options=[
+                "MedPix JSONL",
+                "PMC-Patients CSV",
+                "Synthea Coherent JSONL",
+                "NSCLC Dataset",
+            ],
             index=0,
-            help="Choose which source data to load. Both are normalized into the same downstream workflow.",
+            help="Choose which source data to load. All sources are normalized into the same downstream workflow.",
         )
 
         llm_choice = st.radio(
@@ -634,6 +897,9 @@ def main() -> None:
     elif dataset_choice == "Synthea Coherent JSONL":
         active_dataset_path = SYNTHETIC_DATASET_PATH
         cases = load_cases(str(SYNTHETIC_DATASET_PATH))
+    elif dataset_choice == "NSCLC Dataset":
+        active_dataset_path = NSCLC_DATASET_PATH
+        cases = load_cases(str(NSCLC_DATASET_PATH))
     else:
         active_dataset_path = DATASET_PATH
         cases = load_cases(str(DATASET_PATH))
@@ -655,7 +921,7 @@ def main() -> None:
     st.caption(f"Active dataset: **{dataset_choice}** ({active_dataset_path.name})")
 
     # ── Control bar: patient selector + action buttons ───────────────────────
-    ctrl_uid, ctrl_explain, ctrl_diagnose = st.columns([3, 1.2, 1.2])
+    ctrl_uid, ctrl_explain, ctrl_diagnose, ctrl_trial = st.columns([3, 1.2, 1.2, 1.2])
     with ctrl_uid:
         # Build labels: "MPX1234  (score: 1420)" when sorted, plain UID otherwise
         if sort_by_richness:
@@ -687,10 +953,26 @@ def main() -> None:
             max_value=max(1, _n_images),
             value=min(1, _n_images),
             step=1,
-            disabled=(_n_images == 0),
+            disabled=(_n_images == 0 or not use_images),
         )
 
-    composed_ehr = truncate_text(build_ehr_text(selected_case), target_ehr_chars)
+    # Exclude 'findings' (pre-written imaging/radiology reports) so the LLM
+    # must interpret the attached images independently rather than echoing
+    # dataset-provided radiology conclusions.
+    _case_no_findings = {k: v for k, v in selected_case.items() if k != "findings"}
+    composed_ehr = truncate_text(build_ehr_text(_case_no_findings), target_ehr_chars)
+
+    # When images are disabled, append an unambiguous note to the user-turn
+    # text so the model cannot infer or hallucinate imaging findings from its
+    # training knowledge.  This is the primary safeguard against the model
+    # fabricating CT/MRI descriptions when no images are actually attached.
+    if not use_images:
+        composed_ehr = (
+            composed_ehr
+            + "\n\n[SYSTEM NOTE: No medical images are attached to this request. "
+            "You MUST NOT describe, infer, or invent any imaging findings. "
+            "Set image_findings and image_conclusion to empty strings.]"
+        )
     effective_max_tokens = max_tokens
     if llm_choice == LLM_MEDGEMMA:
         effective_max_tokens = medgemma_token_budget(
@@ -715,6 +997,13 @@ def main() -> None:
             type="primary",
             help="Generate a clinical diagnostic result.",
         )
+    with ctrl_trial:
+        run_trial = st.button(
+            "Trial Profile",
+            use_container_width=True,
+            type="secondary",
+            help="Generate a structured clinical trial matching profile.",
+        )
 
     if llm_choice == LLM_MEDGEMMA and effective_max_tokens < max_tokens:
         st.caption(
@@ -722,7 +1011,7 @@ def main() -> None:
             f"(requested {max_tokens}) based on current context size."
         )
 
-    if (run_explain or run_diagnosis) and not active_credential:
+    if (run_explain or run_diagnosis or run_trial) and not active_credential:
         st.error(
             "Missing credential. Configure one of: "
             + ", ".join(f"`{k}`" for k in required_cred_keys)
@@ -730,19 +1019,66 @@ def main() -> None:
         )
 
     # ── Per-UID + per-model session cache ───────────────────────────────────
+    # Include use_images in the key so that toggling the checkbox immediately
+    # invalidates any result that was computed with a different image setting.
     _mk = "mg" if llm_choice == LLM_MEDGEMMA else "gf"
-    _ek = f"explain_{_mk}_{selected_uid}"
-    _ee = f"explain_error_{_mk}_{selected_uid}"
-    _dk = f"diagnosis_{_mk}_{selected_uid}"
-    _de = f"diagnosis_error_{_mk}_{selected_uid}"
+    _img_suffix = "img" if use_images else "noimg"
+    _ek = f"explain_{_mk}_{_img_suffix}_{selected_uid}"
+    _ee = f"explain_error_{_mk}_{_img_suffix}_{selected_uid}"
+    _dk = f"diagnosis_{_mk}_{_img_suffix}_{selected_uid}"
+    _de = f"diagnosis_error_{_mk}_{_img_suffix}_{selected_uid}"
+    _tk = f"trial_{_mk}_{_img_suffix}_{selected_uid}"
+    _te = f"trial_error_{_mk}_{_img_suffix}_{selected_uid}"
 
     def _run_inference(system_prompt: str) -> str:
+        effective_system_prompt = system_prompt
+        if not use_images:
+            if llm_choice == LLM_MEDGEMMA:
+                # MedGemma 1.5 4B is a small fine-tuned VLM: conflicting instructions
+                # ("examine images" in the body vs "no images" override at the top)
+                # are unreliable because fine-tuning on image-text pairs creates
+                # strong activations that a meta-instruction cannot suppress.
+                # We route to dedicated text-only prompt variants that contain no
+                # image-related language at all, so the conflict never arises.
+                if system_prompt == MEDGEMMA_DIAGNOSIS_PROMPT:
+                    effective_system_prompt = MEDGEMMA_DIAGNOSIS_PROMPT_TEXT_ONLY
+                elif system_prompt.startswith(MEDGEMMA_EXPLAIN_PROMPT):
+                    # preserve any grounded-diagnosis suffix appended by build_grounded_explain_prompt
+                    suffix = system_prompt[len(MEDGEMMA_EXPLAIN_PROMPT):]
+                    effective_system_prompt = MEDGEMMA_EXPLAIN_PROMPT_TEXT_ONLY + suffix
+                elif system_prompt.startswith(TRIAL_PROFILE_PROMPT_TEXT_ONLY):
+                    # Already the correct text-only trial variant (includes topic_id suffix).
+                    effective_system_prompt = system_prompt
+                elif system_prompt.startswith(TRIAL_PROFILE_PROMPT):
+                    # Switch from the images variant to the text-only variant, preserving
+                    # any "Use topic_id: ..." suffix appended by build_trial_profile_prompt.
+                    suffix = system_prompt[len(TRIAL_PROFILE_PROMPT):]
+                    effective_system_prompt = TRIAL_PROFILE_PROMPT_TEXT_ONLY + suffix
+                else:
+                    effective_system_prompt = MEDGEMMA_EXPLAIN_PROMPT_TEXT_ONLY
+            else:
+                # Gemini 2.5 Pro is a large reasoning model — it reliably follows
+                # a meta-level override prepended to the system prompt, so we use
+                # that lighter-weight approach instead of a separate prompt variant.
+                # For trial profile prompts that already contain explicit no-images
+                # instructions, skip the redundant override prepend.
+                if system_prompt.startswith(TRIAL_PROFILE_PROMPT_TEXT_ONLY) or system_prompt.startswith(TRIAL_PROFILE_PROMPT):
+                    effective_system_prompt = system_prompt
+                else:
+                    effective_system_prompt = (
+                        "IMPORTANT OVERRIDE: No medical images have been provided for this case. "
+                        "Do NOT describe, infer, or fabricate any imaging findings based on your "
+                        "training knowledge. Your response MUST set image_findings and "
+                        "image_conclusion to empty strings, and must not reference any radiological "
+                        "or imaging observations in any other field.\n\n"
+                        + system_prompt
+                    )
         if llm_choice == LLM_MEDGEMMA:
             return call_medgemma(
                 endpoint_url=endpoint_url,
                 token=active_credential,
                 model_id=model_id,
-                system_prompt=system_prompt,
+                system_prompt=effective_system_prompt,
                 ehr_text=composed_ehr,
                 image_paths=resolved_images,
                 use_images=use_images,
@@ -755,7 +1091,7 @@ def main() -> None:
             return call_gemini(
                 api_key=active_credential,
                 model_name=model_id,
-                system_prompt=system_prompt,
+                system_prompt=effective_system_prompt,
                 ehr_text=composed_ehr,
                 image_paths=resolved_images,
                 use_images=use_images,
@@ -790,10 +1126,42 @@ def main() -> None:
             except Exception as exc:
                 st.session_state[_de] = str(exc)
 
+    if run_trial and active_credential:
+        st.session_state[_tk] = None
+        st.session_state[_te] = ""
+        # Select the correct prompt variant up-front so _run_inference carries
+        # the right no-images version if images are disabled.
+        _trial_base = (
+            TRIAL_PROFILE_PROMPT
+            if (use_images and max_images > 0 and resolved_images)
+            else TRIAL_PROFILE_PROMPT_TEXT_ONLY
+        )
+        _trial_prompt = build_trial_profile_prompt(_trial_base, selected_uid)
+        with st.spinner(f"[{llm_choice}] Generating clinical trial profile..."):
+            try:
+                _trial_raw = _run_inference(_trial_prompt)
+                _trial_parsed = parse_json_object(_trial_raw)
+                if _trial_parsed:
+                    _trial_used_images = bool(
+                        use_images and max_images > 0 and resolved_images
+                    )
+                    st.session_state[_tk] = validate_and_coerce_trial_profile(
+                        _trial_parsed, selected_uid, _trial_used_images
+                    )
+                else:
+                    st.session_state[_te] = (
+                        "Could not parse a JSON object from the model response. "
+                        "Raw output: " + _trial_raw[:500]
+                    )
+            except Exception as exc:
+                st.session_state[_te] = str(exc)
+
     explain_output   = st.session_state.get(_ek, "")
     explain_error    = st.session_state.get(_ee, "")
     diagnosis_output = st.session_state.get(_dk, "")
     diagnosis_error  = st.session_state.get(_de, "")
+    trial_result     = st.session_state.get(_tk, None)
+    trial_error      = st.session_state.get(_te, "")
 
     # ── Unified 3-panel layout: EHR | AI Insights | Images ──────────────────
     # All three panels are always co-visible so the user can associate the
@@ -818,7 +1186,12 @@ def main() -> None:
             st.write(sanitize_text(selected_case.get("history", "")) or "Not available")
         with st.expander("Physical Exam", expanded=False):
             st.write(sanitize_text(selected_case.get("exam", "")) or "Not available")
-        with st.expander("Imaging Findings", expanded=True):
+        with st.expander("Imaging Findings (EHR record — withheld from LLM)", expanded=False):
+            st.caption(
+                "⚠️ These are the dataset's pre-written imaging findings. "
+                "They are intentionally **not sent** to the LLM — the AI interprets the images directly. "
+                "Compare the AI's image interpretation (in the AI Insights panel) against these records."
+            )
             st.write(sanitize_text(selected_case.get("findings", "")) or "Not available")
 
     # ────────────────────────────────────────────────────────────────────────
@@ -828,7 +1201,7 @@ def main() -> None:
     # ────────────────────────────────────────────────────────────────────────
     with ai_col:
         st.subheader("AI Insights")
-        has_results = bool(explain_output or explain_error or diagnosis_output or diagnosis_error)
+        has_results = bool(explain_output or explain_error or diagnosis_output or diagnosis_error or trial_result or trial_error)
 
         if not has_results:
             st.info(
@@ -958,6 +1331,78 @@ def main() -> None:
                     st.code(explain_output)
             else:
                 st.caption("Run **Explain** to see a plain-language explanation here.")
+
+            # ── Clinical Trial Profile ──────────────────────────────────────
+            if trial_error:
+                st.divider()
+                st.markdown("##### 🔬 Clinical Trial Profile")
+                st.error(f"Trial profile failed: {trial_error}")
+            elif trial_result:
+                st.divider()
+                with st.expander("🔬 Clinical Trial Profile", expanded=True):
+                    st.caption(f"topic_id: `{trial_result.get('topic_id', '')}`")
+
+                    profile_text = trial_result.get("profile_text", "")
+                    if profile_text:
+                        st.markdown("**INGEST Summary**")
+                        st.markdown(profile_text)
+
+                    key_facts = trial_result.get("key_facts") or []
+                    if key_facts:
+                        st.markdown("**Key Facts**")
+                        for kf in key_facts:
+                            field_name = kf.get("field", "")
+                            value = kf.get("value")
+                            evidence_span = kf.get("evidence_span")
+                            required = kf.get("required", False)
+                            notes = kf.get("notes") or ""
+                            is_null = value is None
+
+                            # Source badge for imaging_findings
+                            source_badge = ""
+                            if field_name == "imaging_findings":
+                                if "direct_image_analysis" in notes:
+                                    source_badge = " 🖼️ **Image Analysis**"
+                                elif "ehr_extracted" in notes:
+                                    source_badge = " 📄 **EHR Extracted**"
+                                else:
+                                    source_badge = ""
+                                if is_null:
+                                    source_badge = " ⚠️ **Not Available**"
+
+                            # Null warning for required fields
+                            null_warn = " ⚠️ *missing*" if (required and is_null) else ""
+
+                            # Format value for display
+                            if is_null:
+                                display_val = "_null_"
+                            elif isinstance(value, list):
+                                display_val = "; ".join(str(v) for v in value)
+                            elif isinstance(value, dict):
+                                display_val = ", ".join(
+                                    f"{k}: {v}" for k, v in value.items()
+                                )
+                            else:
+                                display_val = str(value)
+
+                            st.markdown(
+                                f"**{field_name}**{source_badge}{null_warn}: {display_val}"
+                            )
+                            if evidence_span:
+                                st.markdown(f"> *\"{evidence_span}\"*")
+
+                    ambiguities = trial_result.get("ambiguities") or []
+                    if ambiguities:
+                        st.markdown("**Ambiguities**")
+                        for amb in ambiguities:
+                            st.markdown(f"- {amb}")
+
+                    st.download_button(
+                        "⬇ Download JSON",
+                        data=json.dumps(trial_result, indent=2),
+                        file_name=f"trial_profile_{selected_uid}.json",
+                        mime="application/json",
+                    )
 
     # ────────────────────────────────────────────────────────────────────────
     # PANEL 3 — Linked Images

@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-02-21T00:31:50.315834+00:00",
+  "total_time_sec": 834.6,
+  "demos_completed": 3,
+  "demo1_patient": "sigir-20141",
+  "demo1_metrics": {
+    "ndcg_at_5": 0.9808,
+    "precision_at_5": 1.0,
+    "accuracy": 0.4,
+    "macro_f1": 0.2667,
+    "cohens_kappa": 0.2105
+  },
+  "demo2_patient": "MPX1201",
+  "demo2_top_trial": "NCT00005666",
+  "demo3_patient": "MPX1201",
+  "demo3_images_used": 5,
+  "demo3_imaging_criteria": 24
+}
